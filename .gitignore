@@ -1,0 +1,8 @@
+node_modules
+.env
+api/node_modules
+web/node_modules
+api/dist
+web/dist
+photos/*
+!photos/.gitkeep

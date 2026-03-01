@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: charliemaps-db
+    environment:
+      POSTGRES_DB: charliemaps
+      POSTGRES_USER: charlie
+      POSTGRES_PASSWORD: charliepass
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U charlie -d charliemaps"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    image: node:20
+    container_name: charliemaps-api
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 8080
+      DATABASE_URL: postgresql://charlie:charliepass@db:5432/charliemaps
+      PHOTOS_ROOT: /mnt/photos
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./api:/app
+      - ./db/migrations:/db/migrations
+      - ./photos:/mnt/photos:ro
+    command: sh -c "npm install && npm run migrate && npm run dev"
+
+volumes:
+  db_data:
