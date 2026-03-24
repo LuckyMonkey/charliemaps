@@ -52,3 +52,43 @@ export type Selection =
   | { type: "none" }
   | { type: "poi"; id: string; properties: PoiProps }
   | { type: "photo"; id: string; properties: PhotoProps };
+
+export type OverlayPoint = {
+  lat: number;
+  lng: number;
+};
+
+export type OverlayProject = {
+  id: string;
+  name: string;
+  asset_path: string;
+  image_width: number;
+  image_height: number;
+  rows: number;
+  cols: number;
+  opacity: number;
+  points: OverlayPoint[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type OverlayProjectInput = {
+  id?: string;
+  name: string;
+  asset_path: string;
+  image_width: number;
+  image_height: number;
+  rows: number;
+  cols: number;
+  opacity: number;
+  points: OverlayPoint[];
+};
+
+export type OverlayProjectList = {
+  items: OverlayProject[];
+};
+
+export type OverlayAssetUpload = {
+  file_name: string;
+  asset_path: string;
+};

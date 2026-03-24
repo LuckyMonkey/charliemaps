@@ -7,6 +7,7 @@ import { LayerToggles } from "./ui/LayerToggles";
 import { SidePanel } from "./ui/SidePanel";
 import { FullscreenButton } from "./ui/FullscreenButton";
 import type { EmptyPhotoSplatterLayer, PoiCollection } from "../types/models";
+import { routes } from "../app/routes";
 
 const EMPTY_POI: PoiCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_PHOTO_SPLATTER: EmptyPhotoSplatterLayer = {
@@ -27,6 +28,7 @@ export function MapShell() {
           <span className="brand-kicker">CharlieMaps</span>
           <strong className="brand-title">EXIF Splatter Explorer</strong>
         </div>
+        <a href={`#${routes.overlays}`} className="action-button nav-link">Overlay editor</a>
         <NeighborhoodSelect items={n.neighborhoods} value={n.selectedId} onChange={n.setSelectedId} />
         <LayerToggles {...toggles} />
         <FullscreenButton />

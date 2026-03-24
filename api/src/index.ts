@@ -17,12 +17,30 @@ import {
   readPhotoSplatterLayer,
   writePhotoSplatterLayer
 } from "./photos/layer.js";
-import { HttpError, parseBbox, parseNear, parseNeighborhoodBody, parsePoiBody, parseUuid } from "./validate.js";
+import {
+  ensureOverlayDirs,
+  getOverlayProject,
+  listOverlayProjects,
+  resolveOverlayAssetPath,
+  saveOverlayAsset,
+  saveOverlayProject
+} from "./overlays/store.js";
+import {
+  HttpError,
+  parseOverlayAssetBody,
+  parseBbox,
+  parseNear,
+  parseNeighborhoodBody,
+  parseOverlayProjectBody,
+  parsePoiBody,
+  parseUuid
+} from "./validate.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
 const photosRoot = process.env.PHOTOS_ROOT ?? "/mnt/photos";
 const photoLayerPath = process.env.PHOTO_LAYER_PATH ?? "/app/data/photo-splatter.json";
+const appDataDir = process.env.APP_DATA_DIR ?? path.dirname(photoLayerPath);
 
 type NeighborhoodRow = {
   id: string;
@@ -35,7 +53,7 @@ type NeighborhoodRow = {
   created_at: string;
 };
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
@@ -50,6 +68,57 @@ app.get("/health", async (_req, res, next) => {
     const result = await query<{ now: string }>("SELECT now()::text AS now");
     res.json({ ok: true, now: result.rows[0].now });
   } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/overlay-projects", async (_req, res, next) => {
+  try {
+    res.json({ items: await listOverlayProjects(appDataDir) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/overlay-projects/:id", async (req, res, next) => {
+  try {
+    res.json(await getOverlayProject(appDataDir, req.params.id));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return next(new HttpError(404, "Overlay project not found"));
+    }
+    next(err);
+  }
+});
+
+app.post("/overlay-projects", async (req, res, next) => {
+  try {
+    const project = await saveOverlayProject(appDataDir, parseOverlayProjectBody(req.body));
+    res.status(201).json(project);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/overlay-assets", async (req, res, next) => {
+  try {
+    await ensureOverlayDirs(appDataDir);
+    const { name, contentBase64 } = parseOverlayAssetBody(req.body);
+    res.status(201).json(await saveOverlayAsset(appDataDir, name, Buffer.from(contentBase64, "base64")));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/overlay-assets/:fileName", async (req, res, next) => {
+  try {
+    const assetPath = resolveOverlayAssetPath(appDataDir, req.params.fileName);
+    await fs.access(assetPath);
+    res.sendFile(assetPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return next(new HttpError(404, "Overlay asset not found"));
+    }
     next(err);
   }
 });

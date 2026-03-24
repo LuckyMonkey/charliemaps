@@ -104,3 +104,74 @@ export function parseNeighborhoodBody(body: unknown) {
     iso
   };
 }
+
+function asFiniteNumber(value: unknown, label: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new HttpError(400, `${label} must be a finite number`);
+  }
+  return parsed;
+}
+
+export function parseOverlayProjectBody(body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const id = typeof b.id === "string" && b.id.trim() ? b.id.trim() : undefined;
+  const name = typeof b.name === "string" ? b.name.trim() : "";
+  const assetPath = typeof b.asset_path === "string" ? b.asset_path.trim() : "";
+  const imageWidth = asFiniteNumber(b.image_width, "image_width");
+  const imageHeight = asFiniteNumber(b.image_height, "image_height");
+  const rows = asFiniteNumber(b.rows, "rows");
+  const cols = asFiniteNumber(b.cols, "cols");
+  const opacity = asFiniteNumber(b.opacity, "opacity");
+  const points = Array.isArray(b.points) ? b.points : [];
+
+  if (!name) throw new HttpError(400, "name is required");
+  if (!assetPath) throw new HttpError(400, "asset_path is required");
+  if (!Number.isInteger(rows) || rows < 2) throw new HttpError(400, "rows must be an integer >= 2");
+  if (!Number.isInteger(cols) || cols < 2) throw new HttpError(400, "cols must be an integer >= 2");
+  if (!Number.isInteger(imageWidth) || imageWidth <= 0) throw new HttpError(400, "image_width must be a positive integer");
+  if (!Number.isInteger(imageHeight) || imageHeight <= 0) throw new HttpError(400, "image_height must be a positive integer");
+  if (opacity < 0 || opacity > 1) throw new HttpError(400, "opacity must be between 0 and 1");
+  if (points.length !== rows * cols) {
+    throw new HttpError(400, "points must match rows * cols");
+  }
+
+  const parsedPoints = points.map((point, index) => {
+    const p = (point ?? {}) as Record<string, unknown>;
+    try {
+      return {
+        lat: asFiniteNumber(p.lat, `points[${index}].lat`),
+        lng: asFiniteNumber(p.lng, `points[${index}].lng`)
+      };
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  return {
+    id,
+    name,
+    asset_path: assetPath,
+    image_width: imageWidth,
+    image_height: imageHeight,
+    rows,
+    cols,
+    opacity,
+    points: parsedPoints
+  };
+}
+
+export function parseOverlayAssetBody(body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const name = typeof b.name === "string" ? b.name.trim() : "";
+  const mime = typeof b.mime === "string" ? b.mime.trim().toLowerCase() : "";
+  const contentBase64 = typeof b.content_base64 === "string" ? b.content_base64.trim() : "";
+
+  if (!name) throw new HttpError(400, "name is required");
+  if (!mime.startsWith("image/png") && !mime.startsWith("image/jpeg")) {
+    throw new HttpError(400, "only PNG and JPG uploads are supported");
+  }
+  if (!contentBase64) throw new HttpError(400, "content_base64 is required");
+
+  return { name, mime, contentBase64 };
+}

@@ -49,6 +49,37 @@ VITE_API_BASE=http://localhost:8081 docker compose up --build
 
 For remote access via `fridge.local`, the web app also supports same-host API resolution and same-origin static JSON data in `/data/photo-splatter.json`.
 
+## Overlay Editor
+
+CharlieMaps now includes a separate overlay editor for PNG/JPG map sheets.
+
+Open it at:
+
+```text
+http://localhost:5173/#/overlays
+```
+
+What it does:
+- upload any PNG or JPG as an overlay asset
+- place it on the map as a warpable image
+- drag a dot-matrix control grid to force the image onto streets
+- save the overlay as a JSON project under `data/overlays/projects`
+
+Stored files:
+- uploaded images: `data/overlays/assets`
+- saved warp projects: `data/overlays/projects`
+
+API endpoints:
+- `POST /overlay-assets` JSON body with `name`, `mime`, and base64 `content_base64`
+- `GET /overlay-assets/:fileName`
+- `GET /overlay-projects`
+- `GET /overlay-projects/:id`
+- `POST /overlay-projects`
+
+Current editor limitation:
+- the MVP uses a saved control grid mesh warp, not a full Photoshop-style freeform distortion tool
+- the warp is persisted as JSON control points and replayed in-browser on a canvas layer
+
 ## Separate Photo Import System
 
 The multi-source photo import system is separate from the map runtime.

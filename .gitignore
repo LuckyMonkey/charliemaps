@@ -7,5 +7,6 @@ web/dist
 api/data/
 data/import-sources.json
 data/imports/
+data/overlays/
 photos/*
 !photos/.gitkeep

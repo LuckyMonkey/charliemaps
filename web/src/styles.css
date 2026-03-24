@@ -27,6 +27,11 @@ button, select, input {
   font: inherit;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
@@ -77,6 +82,7 @@ button, select, input {
 }
 
 .control select,
+.control input,
 .action-button {
   min-height: 40px;
   padding: 8px 12px;
@@ -84,6 +90,12 @@ button, select, input {
   border-radius: 12px;
   background: var(--paper-strong);
   box-shadow: 0 6px 18px var(--shadow);
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
 }
 
 .toggles {
@@ -104,6 +116,129 @@ button, select, input {
 
 .map-wrap {
   position: relative;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  height: 100%;
+}
+
+.editor-sidebar,
+.editor-inspector {
+  padding: 16px;
+  overflow: auto;
+  background: rgba(255, 250, 241, 0.96);
+}
+
+.editor-sidebar {
+  border-right: 1px solid var(--line);
+}
+
+.editor-inspector {
+  border-left: 1px solid var(--line);
+}
+
+.editor-header h1,
+.editor-inspector h2 {
+  margin: 0 0 10px;
+}
+
+.editor-link {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: var(--accent);
+}
+
+.editor-upload {
+  display: block;
+  margin: 14px 0;
+  text-align: center;
+  cursor: pointer;
+}
+
+.editor-upload input {
+  display: none;
+}
+
+.editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor-project {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-project.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.editor-project span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.editor-map-wrap,
+.editor-map-stage {
+  position: relative;
+  min-width: 0;
+}
+
+.overlay-canvas,
+.overlay-handles {
+  position: absolute;
+  inset: 0;
+}
+
+.overlay-canvas {
+  pointer-events: none;
+}
+
+.overlay-handles {
+  pointer-events: none;
+}
+
+.overlay-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--warm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.overlay-handle:active {
+  cursor: grabbing;
+}
+
+.editor-empty {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 500;
+  max-width: 280px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 250, 241, 0.95);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 24px var(--shadow);
 }
 
 .side-panel {
@@ -227,6 +362,24 @@ button, select, input {
 
   .side-panel {
     border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .editor-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .editor-sidebar,
+  .editor-inspector {
+    border: 0;
+  }
+
+  .editor-sidebar {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .editor-inspector {
     border-top: 1px solid var(--line);
   }
 }
