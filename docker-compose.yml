@@ -37,7 +37,7 @@ services:
       - ./db/migrations:/db/migrations
       - ${PHOTOS_HOST_PATH:-./photos}:/mnt/photos:ro
       - ./data:/app/data
-    command: sh -c "npm install && npm run migrate && npm run dev"
+    command: sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then npm install; fi && npm run migrate && npm run dev"
 
   web:
     image: node:20
@@ -54,7 +54,7 @@ services:
       - ./web:/app
       - ./tiles:/app/public/tiles:ro
       - ./data:/app/public/data:ro
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    command: sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then npm install; fi && npm run dev -- --host 0.0.0.0 --port 5173"
 
 volumes:
   db_data:
