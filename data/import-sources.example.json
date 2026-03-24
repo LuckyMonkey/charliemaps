@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "key": "onedrive",
+      "label": "OneDrive",
+      "root_path": "/home/fridge/OneDrive",
+      "enabled": true
+    },
+    {
+      "key": "gdrive",
+      "label": "Google Drive Backup",
+      "root_path": "/home/fridge/shared/shared/gdrive backup",
+      "enabled": true
+    },
+    {
+      "key": "icloud",
+      "label": "iCloud Export",
+      "root_path": "/home/fridge/photo-imports/icloud-export",
+      "enabled": false
+    }
+  ]
+}

@@ -4,5 +4,8 @@ api/node_modules
 web/node_modules
 api/dist
 web/dist
+api/data/
+data/import-sources.json
+data/imports/
 photos/*
 !photos/.gitkeep

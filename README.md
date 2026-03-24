@@ -23,6 +23,7 @@ To index a real host folder of images, override the mount source with `PHOTOS_HO
 
 - `/api` Express API + migration runner + photo indexer
 - `/web` Vite + React + Leaflet frontend
+- `/api/src/imports` host-side photo import tool for local cloud mirrors
 - `/db/init` base DB init SQL (extensions)
 - `/db/migrations` ordered SQL migrations
 - `/photos` host-backed folder for image files (mounted read-only into API container)
@@ -47,6 +48,39 @@ VITE_API_BASE=http://localhost:8081 docker compose up --build
 ```
 
 For remote access via `fridge.local`, the web app also supports same-host API resolution and same-origin static JSON data in `/data/photo-splatter.json`.
+
+## Separate Photo Import System
+
+The multi-source photo import system is separate from the map runtime.
+
+Use it when you want to ingest local mirrors of:
+- OneDrive
+- Google Drive
+- iCloud exports
+- other photo folders
+
+It scans absolute host paths directly and writes JSON artifacts under `data/imports/`.
+
+Setup:
+
+```bash
+cp data/import-sources.example.json data/import-sources.json
+```
+
+Edit `data/import-sources.json` and point each source at a real host path.
+
+Run the importer from the host:
+
+```bash
+cd api
+npm run import:photos
+```
+
+Outputs:
+- `data/imports/photo-catalog.json` : all scanned photos plus EXIF payloads
+- `data/imports/photo-layer.json` : GPS-only map layer JSON
+
+This importer does not require the map to be running.
 
 - `PHOTOS_HOST_PATH` defaults to `./photos`
 - Example using a real image folder on this machine:
