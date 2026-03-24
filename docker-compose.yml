@@ -29,12 +29,14 @@ services:
       PORT: 8080
       DATABASE_URL: postgresql://charlie:charliepass@db:5432/charliemaps
       PHOTOS_ROOT: /mnt/photos
+      PHOTO_LAYER_PATH: /app/data/photo-splatter.json
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
       - ./api:/app
       - ./db/migrations:/db/migrations
       - ${PHOTOS_HOST_PATH:-./photos}:/mnt/photos:ro
+      - ./data:/app/data
     command: sh -c "npm install && npm run migrate && npm run dev"
 
   web:

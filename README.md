@@ -10,6 +10,7 @@ docker compose up --build
 
 The API service automatically runs SQL migrations from `/db/migrations` on startup.
 Photos are indexed from `PHOTOS_ROOT` (`/mnt/photos` in container), mounted read-only from host `./photos`.
+The API exports a real JSON layer file at `PHOTO_LAYER_PATH` (default `/app/data/photo-splatter.json`) and the map reads that layer through `GET /photos/splatter`.
 If port `8080` is busy, set a different host bind: `API_PORT=8081 docker-compose up --build`.
 If port `5173` is busy, set a different web bind: `WEB_PORT=5174 docker-compose up --build`.
 To index a real host folder of images, override the mount source with `PHOTOS_HOST_PATH=/absolute/host/path`.
@@ -25,6 +26,7 @@ To index a real host folder of images, override the mount source with `PHOTOS_HO
 - `/db/init` base DB init SQL (extensions)
 - `/db/migrations` ordered SQL migrations
 - `/photos` host-backed folder for image files (mounted read-only into API container)
+- `/data` exported JSON layer artifacts such as `photo-splatter.json`
 - `/tiles` raster tiles served by the web app at `/tiles/...`
 
 ## Migration flow
@@ -80,6 +82,7 @@ If `tile_url_template` is null, the frontend falls back to OpenStreetMap for tha
 - `POST /poi`
 - `GET /poi/:id`
 - `POST /photos/reindex`
+- `POST /photos/rebuild-layer`
 - `GET /photos/splatter`
 - `GET /photos/file?path=...`
 - `GET /neighborhoods`
@@ -91,8 +94,8 @@ If `tile_url_template` is null, the frontend falls back to OpenStreetMap for tha
 
 List endpoints return GeoJSON `FeatureCollection`. `GET /poi/:id` returns a single GeoJSON `Feature`.
 
-The frontend uses `GET /neighborhoods/:id/photo-splatter` as the intermediate JSON map layer for EXIF points instead of binding raw photo files directly onto the map.
-For quick global EXIF loading before neighborhood assignment, use `GET /photos/splatter`.
+The frontend uses `GET /neighborhoods/:id/photo-splatter` and `GET /photos/splatter` as intermediate JSON map layers for EXIF points instead of binding raw photo files directly onto the map.
+`GET /photos/splatter` is file-backed by the exported layer at `PHOTO_LAYER_PATH`.
 
 ## Example curl
 
@@ -138,6 +141,12 @@ Reindex photos from mounted folder:
 
 ```bash
 curl -s -X POST http://localhost:8080/photos/reindex | jq
+```
+
+Rebuild the global JSON layer file from indexed photos:
+
+```bash
+curl -s -X POST http://localhost:8080/photos/rebuild-layer | jq
 ```
 
 Load all indexed EXIF points as a lightweight JSON splatter layer:

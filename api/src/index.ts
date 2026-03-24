@@ -11,11 +11,18 @@ import {
   type PoiRow
 } from "./geojson.js";
 import { reindexPhotos } from "./photos/indexer.js";
+import {
+  buildGlobalPhotoSplatterLayer,
+  type PhotoPointRow,
+  readPhotoSplatterLayer,
+  writePhotoSplatterLayer
+} from "./photos/layer.js";
 import { HttpError, parseBbox, parseNear, parseNeighborhoodBody, parsePoiBody, parseUuid } from "./validate.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
 const photosRoot = process.env.PHOTOS_ROOT ?? "/mnt/photos";
+const photoLayerPath = process.env.PHOTO_LAYER_PATH ?? "/app/data/photo-splatter.json";
 
 type NeighborhoodRow = {
   id: string;
@@ -26,14 +33,6 @@ type NeighborhoodRow = {
   iso: Record<string, unknown>;
   geometry?: string;
   created_at: string;
-};
-
-type PhotoPointRow = {
-  id: string;
-  file_path: string;
-  taken_at: string | null;
-  lat: number;
-  lng: number;
 };
 
 app.use(express.json());
@@ -181,7 +180,29 @@ app.get("/poi/:id", async (req, res, next) => {
 app.post("/photos/reindex", async (_req, res, next) => {
   try {
     const stats = await reindexPhotos(photosRoot);
-    res.json(stats);
+    const layer = await buildGlobalPhotoSplatterLayer(photosRoot);
+    await writePhotoSplatterLayer(photoLayerPath, layer);
+    res.json({
+      ...stats,
+      layer_path: photoLayerPath,
+      points: layer.points.length,
+      generated_at: layer.generated_at
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/photos/rebuild-layer", async (_req, res, next) => {
+  try {
+    const layer = await buildGlobalPhotoSplatterLayer(photosRoot);
+    await writePhotoSplatterLayer(photoLayerPath, layer);
+    res.json({
+      ok: true,
+      layer_path: photoLayerPath,
+      points: layer.points.length,
+      generated_at: layer.generated_at
+    });
   } catch (err) {
     next(err);
   }
@@ -189,32 +210,18 @@ app.post("/photos/reindex", async (_req, res, next) => {
 
 app.get("/photos/splatter", async (_req, res, next) => {
   try {
-    const result = await query<PhotoPointRow>(
-      `
-      SELECT
-        id,
-        file_path,
-        taken_at::text,
-        ST_Y(geom::geometry) AS lat,
-        ST_X(geom::geometry) AS lng
-      FROM photo
-      WHERE geom IS NOT NULL
-      ORDER BY taken_at NULLS LAST, created_at DESC
-      `
-    );
+    try {
+      res.json(await readPhotoSplatterLayer(photoLayerPath));
+      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
+        throw err;
+      }
+    }
 
-    res.json({
-      type: "photo-splatter",
-      neighborhood_id: null,
-      points: result.rows.map((row) => ({
-        id: row.id,
-        lat: row.lat,
-        lng: row.lng,
-        weight: 1,
-        taken_at: row.taken_at,
-        file_path: row.file_path
-      }))
-    });
+    const layer = await buildGlobalPhotoSplatterLayer(photosRoot);
+    await writePhotoSplatterLayer(photoLayerPath, layer);
+    res.json(layer);
   } catch (err) {
     next(err);
   }
