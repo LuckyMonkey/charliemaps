@@ -39,11 +39,14 @@ To index a real host folder of images, override the mount source with `PHOTOS_HO
 ## Frontend Config
 
 - `VITE_API_BASE` defaults to `http://localhost:8080`
+- `VITE_API_PORT` defaults to `8080`
 - Override it when needed:
 
 ```bash
 VITE_API_BASE=http://localhost:8081 docker compose up --build
 ```
+
+For remote access via `fridge.local`, the web app also supports same-host API resolution and same-origin static JSON data in `/data/photo-splatter.json`.
 
 - `PHOTOS_HOST_PATH` defaults to `./photos`
 - Example using a real image folder on this machine:
@@ -96,6 +99,7 @@ List endpoints return GeoJSON `FeatureCollection`. `GET /poi/:id` returns a sing
 
 The frontend uses `GET /neighborhoods/:id/photo-splatter` and `GET /photos/splatter` as intermediate JSON map layers for EXIF points instead of binding raw photo files directly onto the map.
 `GET /photos/splatter` is file-backed by the exported layer at `PHOTO_LAYER_PATH`.
+For the global no-neighborhood view, the web app first tries the same-origin static file `/data/photo-splatter.json` and then falls back to the API.
 
 ## Example curl
 

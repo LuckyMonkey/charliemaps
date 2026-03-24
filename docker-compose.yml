@@ -46,12 +46,14 @@ services:
     depends_on:
       - api
     environment:
-      VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8080}
+      VITE_API_BASE: ${VITE_API_BASE:-}
+      VITE_API_PORT: ${VITE_API_PORT:-8080}
     ports:
       - "${WEB_PORT:-5173}:5173"
     volumes:
       - ./web:/app
       - ./tiles:/app/public/tiles:ro
+      - ./data:/app/public/data:ro
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
 
 volumes:
