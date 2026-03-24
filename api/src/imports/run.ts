@@ -118,7 +118,6 @@ function buildBbox(points: ImportLayerPoint[]) {
 }
 
 async function scanSource(source: ImportSource) {
-  const files = await walkFiles(source.root_path);
   const stats: SourceStats = {
     key: source.key,
     label: source.label,
@@ -129,6 +128,15 @@ async function scanSource(source: ImportSource) {
     errors: 0
   };
   const records: ImportPhotoRecord[] = [];
+  let files: string[] = [];
+
+  try {
+    files = await walkFiles(source.root_path);
+  } catch (err) {
+    stats.errors += 1;
+    console.warn(`import skip source ${source.root_path}:`, err);
+    return { stats, records };
+  }
 
   for (const filePath of files) {
     stats.scanned += 1;
@@ -234,4 +242,3 @@ void main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

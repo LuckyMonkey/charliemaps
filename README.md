@@ -56,24 +56,87 @@ The multi-source photo import system is separate from the map runtime.
 Use it when you want to ingest local mirrors of:
 - OneDrive
 - Google Drive
-- iCloud exports
+- iCloud Photos
 - other photo folders
 
 It scans absolute host paths directly and writes JSON artifacts under `data/imports/`.
 
-Setup:
+Recommended mirror folders on the host:
+
+```bash
+mkdir -p /home/fridge/photo-imports/gdrive
+mkdir -p /home/fridge/photo-imports/onedrive
+mkdir -p /home/fridge/photo-imports/icloud
+```
+
+Config setup:
 
 ```bash
 cp data/import-sources.example.json data/import-sources.json
 ```
 
-Edit `data/import-sources.json` and point each source at a real host path.
+The example config already points at the mirror folders above:
+- `/home/fridge/photo-imports/gdrive`
+- `/home/fridge/photo-imports/onedrive`
+- `/home/fridge/photo-imports/icloud`
+
+Cloud sync tools:
+- Google Drive: `rclone`
+- OneDrive: `rclone` or a dedicated OneDrive client
+- iCloud Photos: `icloudpd`
+
+This repo ships host-side helper scripts under `scripts/` so the flow stays consistent.
+
+### Google Drive Mirror
+
+Create an `rclone` remote:
+
+```bash
+rclone config
+```
+
+Then sync a Google Drive folder into the local mirror:
+
+```bash
+GDRIVE_REMOTE='gdrivephotos:Photos' ./scripts/sync-gdrive.sh
+```
+
+### OneDrive Mirror
+
+Create an `rclone` remote:
+
+```bash
+rclone config
+```
+
+Then sync a OneDrive folder into the local mirror:
+
+```bash
+ONEDRIVE_REMOTE='onedrivephotos:Pictures' ./scripts/sync-onedrive.sh
+```
+
+### iCloud Photos Mirror
+
+Install `icloudpd` for the current user if needed:
+
+```bash
+python3 -m pip install --user icloudpd
+```
+
+Then sync iCloud Photos into the local mirror:
+
+```bash
+APPLE_ID='you@example.com' ./scripts/sync-icloud.sh
+```
+
+The first iCloud run is interactive. It may prompt for password and 2FA. Keep the cookie directory that `icloudpd` creates so later runs stay incremental.
+
+### Import Run
 
 Run the importer from the host:
 
 ```bash
-cd api
-npm run import:photos
+./scripts/import-photos.sh
 ```
 
 Outputs:
@@ -81,6 +144,17 @@ Outputs:
 - `data/imports/photo-layer.json` : GPS-only map layer JSON
 
 This importer does not require the map to be running.
+
+To sync all configured providers and immediately rebuild the JSON outputs:
+
+```bash
+GDRIVE_REMOTE='gdrivephotos:Photos' \
+ONEDRIVE_REMOTE='onedrivephotos:Pictures' \
+APPLE_ID='you@example.com' \
+./scripts/sync-all-photos.sh
+```
+
+Provider auth is still the one manual step. The scripts assume you already completed `rclone config` for Google Drive and OneDrive, and that `icloudpd` can log into iCloud Photos on this host.
 
 - `PHOTOS_HOST_PATH` defaults to `./photos`
 - Example using a real image folder on this machine:
