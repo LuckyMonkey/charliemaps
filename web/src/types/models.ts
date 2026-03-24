@@ -22,10 +22,31 @@ export type PoiProps = {
 export type PhotoProps = {
   file_path: string;
   taken_at?: string | null;
+  count?: number;
+};
+
+export type PhotoPoint = {
+  id: string;
+  lat: number;
+  lng: number;
+  weight: number;
+  file_path: string;
+  taken_at?: string | null;
+  count?: number;
+};
+
+export type PhotoSplatterLayer = {
+  type: "photo-splatter";
+  neighborhood_id: string | null;
+  points: PhotoPoint[];
 };
 
 export type PoiCollection = FeatureCollection<PoiProps>;
-export type PhotoCollection = FeatureCollection<PhotoProps>;
+export type EmptyPhotoSplatterLayer = {
+  type: "photo-splatter";
+  neighborhood_id: string | null;
+  points: [];
+};
 
 export type Selection =
   | { type: "none" }

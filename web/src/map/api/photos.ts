@@ -1,9 +1,13 @@
 import { apiBase, apiGet } from "./client";
 import { encodeFilePath } from "../../utils/encode";
-import type { PhotoCollection } from "../../types/models";
+import type { PhotoSplatterLayer } from "../../types/models";
 
-export function listPhotosByNeighborhood(neighborhoodId: string) {
-  return apiGet<PhotoCollection>(`/neighborhoods/${neighborhoodId}/photos`);
+export function loadPhotoSplatterByNeighborhood(neighborhoodId: string) {
+  return apiGet<PhotoSplatterLayer>(`/neighborhoods/${neighborhoodId}/photo-splatter`);
+}
+
+export function loadPhotoSplatter() {
+  return apiGet<PhotoSplatterLayer>("/photos/splatter");
 }
 
 export function photoFileUrl(filePath: string) {

@@ -3,39 +3,57 @@ import { MapContainer, useMap } from "react-leaflet";
 import { BaseTileLayer } from "./layers/BaseTileLayer";
 import { PoiLayer } from "./layers/PoiLayer";
 import { PhotoLayer } from "./layers/PhotoLayer";
-import type { Neighborhood, PhotoCollection, PoiCollection } from "../types/models";
+import type { Neighborhood, PhotoProps, PhotoSplatterLayer, PoiCollection } from "../types/models";
+import { getNeighborhoodBounds, getPhotoSplatterBounds, getPoiBounds } from "../utils/bounds";
 
-function ViewSync({ neighborhood }: { neighborhood?: Neighborhood }) {
+function ViewSync({
+  neighborhood,
+  poi,
+  photoSplatter
+}: {
+  neighborhood?: Neighborhood;
+  poi: PoiCollection;
+  photoSplatter: PhotoSplatterLayer;
+}) {
   const map = useMap();
+
   useEffect(() => {
-    if (!neighborhood?.bbox) return;
-    const b = neighborhood.bbox;
-    const center: [number, number] = [(b.minLat + b.maxLat) / 2, (b.minLng + b.maxLng) / 2];
-    map.setView(center, 0, { animate: false });
-  }, [map, neighborhood]);
+    const bounds =
+      getNeighborhoodBounds(neighborhood) ??
+      getPhotoSplatterBounds(photoSplatter) ??
+      getPoiBounds(poi);
+
+    if (!bounds) return;
+    map.fitBounds(bounds, { padding: [32, 32], maxZoom: neighborhood ? 14 : 12 });
+  }, [map, neighborhood, poi, photoSplatter]);
+
   return null;
 }
 
 type Props = {
   neighborhood?: Neighborhood;
   poi: PoiCollection;
-  photos: PhotoCollection;
+  photoSplatter: PhotoSplatterLayer;
   showPoi: boolean;
   showPhotos: boolean;
   onSelectPoi: (id: string, props: PoiCollection["features"][number]["properties"]) => void;
-  onSelectPhoto: (id: string, props: PhotoCollection["features"][number]["properties"]) => void;
+  onSelectPhoto: (id: string, props: PhotoProps) => void;
 };
 
 const EMPTY: PoiCollection = { type: "FeatureCollection", features: [] };
-const EMPTY_PHOTOS: PhotoCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_PHOTO_SPLATTER: PhotoSplatterLayer = {
+  type: "photo-splatter",
+  neighborhood_id: "",
+  points: []
+};
 
-export function MapView({ neighborhood, poi, photos, showPoi, showPhotos, onSelectPoi, onSelectPhoto }: Props) {
+export function MapView({ neighborhood, poi, photoSplatter, showPoi, showPhotos, onSelectPoi, onSelectPhoto }: Props) {
   return (
-    <MapContainer center={[42.36, -71.05]} zoom={0} minZoom={0} maxZoom={0} zoomControl style={{ height: "100%", width: "100%" }}>
+    <MapContainer center={[42.36, -71.05]} zoom={11} minZoom={3} maxZoom={18} zoomControl style={{ height: "100%", width: "100%" }}>
       <BaseTileLayer tileUrlTemplate={neighborhood?.tile_url_template} />
-      <ViewSync neighborhood={neighborhood} />
+      <ViewSync neighborhood={neighborhood} poi={poi || EMPTY} photoSplatter={photoSplatter || EMPTY_PHOTO_SPLATTER} />
       <PoiLayer data={poi || EMPTY} enabled={showPoi} onSelect={onSelectPoi} />
-      <PhotoLayer data={photos || EMPTY_PHOTOS} enabled={showPhotos} onSelect={onSelectPhoto} />
+      <PhotoLayer data={photoSplatter || EMPTY_PHOTO_SPLATTER} enabled={showPhotos} onSelect={onSelectPhoto} />
     </MapContainer>
   );
 }

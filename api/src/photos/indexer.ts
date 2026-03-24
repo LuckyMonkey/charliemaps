@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import * as exifr from "exifr";
+import exifr from "exifr";
 import { query } from "../db.js";
 
 export type ReindexStats = {
@@ -17,6 +17,7 @@ async function walkFiles(dir: string): Promise<string[]> {
   const out: string[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.name.startsWith("._")) continue;
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...(await walkFiles(abs)));

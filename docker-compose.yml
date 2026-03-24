@@ -34,8 +34,23 @@ services:
     volumes:
       - ./api:/app
       - ./db/migrations:/db/migrations
-      - ./photos:/mnt/photos:ro
+      - ${PHOTOS_HOST_PATH:-./photos}:/mnt/photos:ro
     command: sh -c "npm install && npm run migrate && npm run dev"
+
+  web:
+    image: node:20
+    container_name: charliemaps-web
+    working_dir: /app
+    depends_on:
+      - api
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8080}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./web:/app
+      - ./tiles:/app/public/tiles:ro
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
 
 volumes:
   db_data:

@@ -4,5 +4,5 @@ export function FullscreenButton() {
     else await document.exitFullscreen();
   };
 
-  return <button onClick={() => void onClick()}>Fullscreen</button>;
+  return <button className="action-button" onClick={() => void onClick()} type="button">Fullscreen</button>;
 }

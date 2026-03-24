@@ -10,7 +10,7 @@ export type GeoJsonFeatureCollection = {
   features: GeoJsonFeature[];
 };
 
-type PoiRow = {
+export type PoiRow = {
   id: string;
   name: string;
   kind: string;
@@ -45,7 +45,7 @@ export function poiRowsToFeatureCollection(rows: PoiRow[]): GeoJsonFeatureCollec
   };
 }
 
-type PhotoRow = {
+export type PhotoRow = {
   id: string;
   file_path: string;
   taken_at: string | null;

@@ -3,13 +3,38 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { query, pool } from "./db.js";
-import { photoRowsToFeatureCollection, poiRowToFeature, poiRowsToFeatureCollection } from "./geojson.js";
+import {
+  photoRowsToFeatureCollection,
+  poiRowToFeature,
+  poiRowsToFeatureCollection,
+  type PhotoRow,
+  type PoiRow
+} from "./geojson.js";
 import { reindexPhotos } from "./photos/indexer.js";
 import { HttpError, parseBbox, parseNear, parseNeighborhoodBody, parsePoiBody, parseUuid } from "./validate.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
 const photosRoot = process.env.PHOTOS_ROOT ?? "/mnt/photos";
+
+type NeighborhoodRow = {
+  id: string;
+  name: string;
+  bbox: Record<string, unknown>;
+  tile_source: string;
+  tile_url_template: string | null;
+  iso: Record<string, unknown>;
+  geometry?: string;
+  created_at: string;
+};
+
+type PhotoPointRow = {
+  id: string;
+  file_path: string;
+  taken_at: string | null;
+  lat: number;
+  lng: number;
+};
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -33,7 +58,7 @@ app.get("/health", async (_req, res, next) => {
 app.get("/poi", async (req, res, next) => {
   try {
     const { minLng, minLat, maxLng, maxLat } = parseBbox(req.query.bbox);
-    const result = await query(
+    const result = await query<PoiRow>(
       `
       SELECT
         id,
@@ -62,7 +87,7 @@ app.get("/poi", async (req, res, next) => {
 app.get("/poi/near", async (req, res, next) => {
   try {
     const { lat, lng, radiusM } = parseNear(req.query as Record<string, unknown>);
-    const result = await query(
+    const result = await query<PoiRow>(
       `
       SELECT
         id,
@@ -96,7 +121,7 @@ app.get("/poi/near", async (req, res, next) => {
 app.post("/poi", async (req, res, next) => {
   try {
     const { name, kind, wiki_slug, props, lat, lng } = parsePoiBody(req.body);
-    const result = await query(
+    const result = await query<PoiRow>(
       `
       INSERT INTO poi (name, kind, wiki_slug, props, geom)
       VALUES (
@@ -126,7 +151,7 @@ app.post("/poi", async (req, res, next) => {
 app.get("/poi/:id", async (req, res, next) => {
   try {
     const id = parseUuid(req.params.id);
-    const result = await query(
+    const result = await query<PoiRow>(
       `
       SELECT
         id,
@@ -162,9 +187,42 @@ app.post("/photos/reindex", async (_req, res, next) => {
   }
 });
 
+app.get("/photos/splatter", async (_req, res, next) => {
+  try {
+    const result = await query<PhotoPointRow>(
+      `
+      SELECT
+        id,
+        file_path,
+        taken_at::text,
+        ST_Y(geom::geometry) AS lat,
+        ST_X(geom::geometry) AS lng
+      FROM photo
+      WHERE geom IS NOT NULL
+      ORDER BY taken_at NULLS LAST, created_at DESC
+      `
+    );
+
+    res.json({
+      type: "photo-splatter",
+      neighborhood_id: null,
+      points: result.rows.map((row) => ({
+        id: row.id,
+        lat: row.lat,
+        lng: row.lng,
+        weight: 1,
+        taken_at: row.taken_at,
+        file_path: row.file_path
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get("/neighborhoods", async (_req, res, next) => {
   try {
-    const result = await query(
+    const result = await query<NeighborhoodRow>(
       `
       SELECT
         id,
@@ -187,7 +245,7 @@ app.get("/neighborhoods", async (_req, res, next) => {
 app.get("/neighborhoods/:id", async (req, res, next) => {
   try {
     const id = parseUuid(req.params.id);
-    const result = await query(
+    const result = await query<NeighborhoodRow>(
       `
       SELECT
         id,
@@ -214,7 +272,7 @@ app.get("/neighborhoods/:id", async (req, res, next) => {
 app.post("/neighborhoods", async (req, res, next) => {
   try {
     const { name, polygon, tileUrlTemplate, iso } = parseNeighborhoodBody(req.body);
-    const result = await query(
+    const result = await query<NeighborhoodRow>(
       `
       WITH shape AS (
         SELECT ST_SetSRID(ST_GeomFromGeoJSON($2::text), 4326) AS g
@@ -252,7 +310,7 @@ app.post("/neighborhoods", async (req, res, next) => {
 app.get("/neighborhoods/:id/poi", async (req, res, next) => {
   try {
     const neighborhoodId = parseUuid(req.params.id);
-    const result = await query(
+    const result = await query<PoiRow>(
       `
       SELECT
         id,
@@ -277,7 +335,7 @@ app.get("/neighborhoods/:id/poi", async (req, res, next) => {
 app.get("/neighborhoods/:id/photos", async (req, res, next) => {
   try {
     const neighborhoodId = parseUuid(req.params.id);
-    const result = await query(
+    const result = await query<PhotoRow>(
       `
       SELECT
         id,
@@ -292,6 +350,42 @@ app.get("/neighborhoods/:id/photos", async (req, res, next) => {
       [neighborhoodId]
     );
     res.json(photoRowsToFeatureCollection(result.rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/neighborhoods/:id/photo-splatter", async (req, res, next) => {
+  try {
+    const neighborhoodId = parseUuid(req.params.id);
+    const result = await query<PhotoPointRow>(
+      `
+      SELECT
+        id,
+        file_path,
+        taken_at::text,
+        ST_Y(geom::geometry) AS lat,
+        ST_X(geom::geometry) AS lng
+      FROM photo
+      WHERE neighborhood_id = $1
+        AND geom IS NOT NULL
+      ORDER BY taken_at NULLS LAST, created_at DESC
+      `,
+      [neighborhoodId]
+    );
+
+    res.json({
+      type: "photo-splatter",
+      neighborhood_id: neighborhoodId,
+      points: result.rows.map((row) => ({
+        id: row.id,
+        lat: row.lat,
+        lng: row.lng,
+        weight: 1,
+        taken_at: row.taken_at,
+        file_path: row.file_path
+      }))
+    });
   } catch (err) {
     next(err);
   }

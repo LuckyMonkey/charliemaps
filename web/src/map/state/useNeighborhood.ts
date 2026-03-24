@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getNeighborhood, listNeighborhoods } from "../api/neighborhoods";
 import { listPoiByNeighborhood } from "../api/poi";
-import { listPhotosByNeighborhood } from "../api/photos";
-import type { Neighborhood, PhotoCollection, PoiCollection } from "../../types/models";
+import { loadPhotoSplatter, loadPhotoSplatterByNeighborhood } from "../api/photos";
+import type { Neighborhood, PhotoSplatterLayer, PoiCollection } from "../../types/models";
 
-type CachedData = { neighborhood: Neighborhood; poi: PoiCollection; photos: PhotoCollection };
+type CachedData = { neighborhood?: Neighborhood; poi: PoiCollection; photoSplatter: PhotoSplatterLayer };
+
+const EMPTY_POI: PoiCollection = { type: "FeatureCollection", features: [] };
 
 export function useNeighborhood() {
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
@@ -19,47 +21,59 @@ export function useNeighborhood() {
       try {
         const res = await listNeighborhoods();
         setNeighborhoods(res.items);
-        if (!selectedId && res.items.length) setSelectedId(res.items[0].id);
+        if (!selectedId && res.items.length) {
+          setSelectedId(res.items[0].id);
+          return;
+        }
+
+        if (!res.items.length) {
+          const globalPhotos = await loadPhotoSplatter();
+          setActive({
+            poi: EMPTY_POI,
+            photoSplatter: globalPhotos
+          });
+        }
       } catch (err) {
         setError((err as Error).message);
       }
     })();
   }, [selectedId]);
 
-  const load = useCallback(async (id: string) => {
-    if (!id) return;
-    if (cache.current[id]) {
-      setActive(cache.current[id]);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const [neighborhood, poi, photos] = await Promise.all([
-        getNeighborhood(id),
-        listPoiByNeighborhood(id),
-        listPhotosByNeighborhood(id)
-      ]);
-      const data = { neighborhood, poi, photos };
-      cache.current[id] = data;
-      setActive(data);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void load(selectedId);
-  }, [selectedId, load]);
+    if (!selectedId) return;
 
-  return useMemo(() => ({
+    void (async () => {
+      if (cache.current[selectedId]) {
+        setActive(cache.current[selectedId]);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const [neighborhood, poi, photos] = await Promise.all([
+          getNeighborhood(selectedId),
+          listPoiByNeighborhood(selectedId),
+          loadPhotoSplatterByNeighborhood(selectedId)
+        ]);
+
+        const data = { neighborhood, poi, photoSplatter: photos };
+        cache.current[selectedId] = data;
+        setActive(data);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [selectedId]);
+
+  return {
     neighborhoods,
     selectedId,
     setSelectedId,
     active,
     loading,
     error
-  }), [neighborhoods, selectedId, active, loading, error]);
+  };
 }

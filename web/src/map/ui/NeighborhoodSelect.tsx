@@ -11,6 +11,7 @@ export function NeighborhoodSelect({ items, value, onChange }: Props) {
     <label className="control">
       Neighborhood
       <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {!items.length ? <option value="">All indexed photos</option> : null}
         {items.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
       </select>
     </label>

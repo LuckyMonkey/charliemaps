@@ -6,8 +6,14 @@ import { NeighborhoodSelect } from "./ui/NeighborhoodSelect";
 import { LayerToggles } from "./ui/LayerToggles";
 import { SidePanel } from "./ui/SidePanel";
 import { FullscreenButton } from "./ui/FullscreenButton";
+import type { EmptyPhotoSplatterLayer, PoiCollection } from "../types/models";
 
-const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] } as const;
+const EMPTY_POI: PoiCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_PHOTO_SPLATTER: EmptyPhotoSplatterLayer = {
+  type: "photo-splatter",
+  neighborhood_id: "",
+  points: []
+};
 
 export function MapShell() {
   const n = useNeighborhood();
@@ -17,6 +23,10 @@ export function MapShell() {
   return (
     <div className="layout">
       <div className="top-controls">
+        <div className="brand-block">
+          <span className="brand-kicker">CharlieMaps</span>
+          <strong className="brand-title">EXIF Splatter Explorer</strong>
+        </div>
         <NeighborhoodSelect items={n.neighborhoods} value={n.selectedId} onChange={n.setSelectedId} />
         <LayerToggles {...toggles} />
         <FullscreenButton />
@@ -24,15 +34,20 @@ export function MapShell() {
       <div className="map-wrap">
         <MapView
           neighborhood={n.active?.neighborhood}
-          poi={n.active?.poi ?? EMPTY_COLLECTION}
-          photos={n.active?.photos ?? EMPTY_COLLECTION}
+          poi={n.active?.poi ?? EMPTY_POI}
+          photoSplatter={n.active?.photoSplatter ?? EMPTY_PHOTO_SPLATTER}
           showPoi={toggles.showPoi}
           showPhotos={toggles.showPhotos}
           onSelectPoi={(id, properties) => setSelection({ type: "poi", id, properties })}
           onSelectPhoto={(id, properties) => setSelection({ type: "photo", id, properties })}
         />
       </div>
-      <SidePanel selection={selection} />
+      <SidePanel
+        selection={selection}
+        neighborhood={n.active?.neighborhood}
+        photoCount={n.active?.photoSplatter.points.length ?? 0}
+        poiCount={n.active?.poi.features.length ?? 0}
+      />
       {n.loading ? <div className="status">Loading...</div> : null}
       {n.error ? <div className="status error">{n.error}</div> : null}
     </div>
