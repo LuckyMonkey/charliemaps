@@ -1,4 +1,4 @@
-import { CircleMarker, Popup } from "react-leaflet";
+import { CircleMarker, Popup, Tooltip } from "react-leaflet";
 import type { PhotoPoint, PhotoProps, PhotoSplatterLayer } from "../../types/models";
 import { photoFileUrl } from "../api/photos";
 import { aggregatePhotoSplatter } from "../../utils/splatter";
@@ -10,12 +10,13 @@ type Props = {
 };
 
 function markerStyle(weight: number) {
-  const intensity = Math.min(1, weight / 8);
+  const intensity = Math.min(1, weight / 10);
   return {
-    radius: 5 + weight * 2,
-    color: "#9a3412",
-    fillColor: intensity > 0.55 ? "#ef4444" : "#f59e0b",
-    fillOpacity: 0.28 + intensity * 0.4
+    radius: 7 + weight * 2.4,
+    color: "#ffffff",
+    weight: 2,
+    fillColor: intensity > 0.55 ? "#dc2626" : "#ea580c",
+    fillOpacity: 0.72 + intensity * 0.18
   };
 }
 
@@ -29,6 +30,9 @@ function PhotoMarker({ point, onSelect }: { point: PhotoPoint; onSelect: Props["
       pathOptions={style}
       eventHandlers={{ click: () => onSelect(point.id, { file_path: point.file_path, taken_at: point.taken_at, count: point.count }) }}
     >
+      <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
+        {point.count && point.count > 1 ? `${point.count} photos` : "1 photo"}
+      </Tooltip>
       <Popup>
         <div>
           {point.count && point.count > 1 ? <strong>{point.count} photos in this cluster</strong> : null}

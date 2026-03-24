@@ -1,6 +1,6 @@
 import type { PhotoPoint, PhotoSplatterLayer } from "../types/models";
 
-const CELL_SIZE = 0.0025;
+const CELL_SIZE = 0.0015;
 
 function bucketKey(point: PhotoPoint) {
   const latBucket = Math.round(point.lat / CELL_SIZE);
@@ -28,7 +28,7 @@ export function aggregatePhotoSplatter(layer: PhotoSplatterLayer): PhotoSplatter
       ...representative,
       lat,
       lng,
-      weight: Math.min(8, 1 + Math.log2(count)),
+      weight: Math.min(10, 1 + Math.log2(count)),
       count
     };
   });

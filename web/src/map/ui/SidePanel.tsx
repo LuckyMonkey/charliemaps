@@ -18,18 +18,19 @@ export function SidePanel({ selection, neighborhood, photoCount, poiCount }: Pro
     return (
       <aside className="side-panel" tabIndex={0} aria-label="Details panel">
         <h2>{neighborhood?.name ?? "EXIF Splatter"}</h2>
-        <p>Pan and zoom the map, then click a splatter point or POI for details.</p>
+        <p>Pan and zoom the map, then click a photo point or POI for details.</p>
         <div className="stat-grid">
           <div className="stat-card">
             <strong>{photoCount}</strong>
-            <span>Map points</span>
+            <span>Photo points</span>
           </div>
           <div className="stat-card">
             <strong>{poiCount}</strong>
-            <span>POIs</span>
+            <span>POIs loaded</span>
           </div>
         </div>
-        {neighborhood?.tile_url_template ? <p>Using neighborhood raster tiles.</p> : <p>Using OpenStreetMap fallback tiles.</p>}
+        {poiCount === 0 ? <p>No POIs are indexed yet. The visible layer right now is the EXIF photo splatter.</p> : null}
+        {neighborhood?.tile_url_template ? <p>Using neighborhood raster tiles.</p> : <p>Using a simplified land-map fallback.</p>}
       </aside>
     );
   }
