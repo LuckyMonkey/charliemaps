@@ -16,12 +16,15 @@ function candidateBases() {
   };
 
   if (hostname !== "localhost" && hostname !== "127.0.0.1") {
-    push(`${protocol}//${hostname}:${CONFIGURED_PORT || "8081"}`);
+    push(`${protocol}//${hostname}:${CONFIGURED_PORT}`);
+    push(`${protocol}//${hostname}:8081`);
     push(`${protocol}//${hostname}:8080`);
   }
 
   push(CONFIGURED_BASE);
-  push(`${protocol}//${hostname}:${CONFIGURED_PORT || "8080"}`);
+  push(`${protocol}//${hostname}:${CONFIGURED_PORT}`);
+  push(`${protocol}//${hostname}:8081`);
+  push(`${protocol}//${hostname}:8080`);
   push("http://localhost:8080");
 
   return candidates.filter(Boolean);

@@ -8,6 +8,14 @@ type CachedData = { neighborhood?: Neighborhood; poi: PoiCollection; photoSplatt
 
 const EMPTY_POI: PoiCollection = { type: "FeatureCollection", features: [] };
 
+async function loadGlobalFallback() {
+  const globalPhotos = await loadPhotoSplatter();
+  return {
+    poi: EMPTY_POI,
+    photoSplatter: globalPhotos
+  } satisfies CachedData;
+}
+
 export function useNeighborhood() {
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -27,14 +35,15 @@ export function useNeighborhood() {
         }
 
         if (!res.items.length) {
-          const globalPhotos = await loadPhotoSplatter();
-          setActive({
-            poi: EMPTY_POI,
-            photoSplatter: globalPhotos
-          });
+          setActive(await loadGlobalFallback());
         }
       } catch (err) {
-        setError((err as Error).message);
+        try {
+          setActive(await loadGlobalFallback());
+          setError(`Neighborhood API unavailable. Showing exported photo layer. ${(err as Error).message}`);
+        } catch (fallbackErr) {
+          setError((fallbackErr as Error).message || (err as Error).message);
+        }
       }
     })();
   }, [selectedId]);
