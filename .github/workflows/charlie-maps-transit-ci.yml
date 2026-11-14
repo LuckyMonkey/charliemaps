@@ -1,0 +1,29 @@
+name: Charlie Maps transit verification
+on:
+  push:
+    branches: [feat/transit-neo4j]
+    paths:
+      - 'transit/**'
+      - '.github/workflows/charlie-maps-transit-ci.yml'
+  pull_request:
+    paths:
+      - 'transit/**'
+      - '.github/workflows/charlie-maps-transit-ci.yml'
+jobs:
+  types-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: API typecheck
+        working-directory: transit/api
+        run: npm install --no-audit --no-fund && npm run build
+      - name: React build
+        working-directory: transit/web
+        run: npm install --no-audit --no-fund && npm run build
+      - name: Docker Compose config validation
+        env:
+          NEO4J_PASSWORD: ci-not-a-real-secret
+        run: docker compose -f transit/compose.yml config --quiet

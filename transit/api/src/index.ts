@@ -33,8 +33,8 @@ app.get('/api/events', (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
-  res.write('event: status\\ndata: {"mode":"scaffold","live":false}\\n\\n');
-  const timer = setInterval(() => res.write(': heartbeat\\n\\n'), 25000);
+  res.write('event: status\ndata: {"mode":"scaffold","live":false}\n\n');
+  const timer = setInterval(() => res.write(': heartbeat\n\n'), 25000);
   req.on('close', () => clearInterval(timer));
 });
 
