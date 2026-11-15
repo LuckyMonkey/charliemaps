@@ -1,7 +1,7 @@
 FROM node:22-alpine AS web-build
 WORKDIR /build/web
 COPY web/package.json ./
-RUN npm install --ignore-scripts
+RUN npm install --include=dev --ignore-scripts
 COPY web/ ./
 RUN npm run build
 
