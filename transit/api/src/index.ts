@@ -1,4 +1,6 @@
 import express, { Request, Response } from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { driver, graphReady, getNetworkProjection } from './graph.js';
 
 const app = express();
@@ -39,6 +41,9 @@ app.get('/api/events', (req: Request, res: Response) => {
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+app.use(express.static(webRoot));
+app.get('*', (_req, res) => res.sendFile(path.join(webRoot, 'index.html')));
 const server = app.listen(port, '0.0.0.0', () => console.log('Charlie Maps API on :' + port));
 async function close() {
   server.close();

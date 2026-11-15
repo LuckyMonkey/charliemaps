@@ -2,7 +2,7 @@
 
 **Boston is Charlie canon.** A schedule-first, graph-native MBTA explorer on Fridge.
 
-> Status: isolated development scaffold on `feat/transit-neo4j`. The existing CharlieMaps PostGIS/photo project in the repository root is preserved unchanged. UI starts in **DEMO** mode; no real timetable import or live vehicle feed is represented as implemented yet.
+> Status: isolated transit app on `main`. The existing CharlieMaps PostGIS/photo project in the repository root is preserved unchanged. UI starts in **DEMO** mode; no real timetable import or live vehicle feed is represented as implemented yet.
 
 ## Architecture
 
@@ -20,12 +20,13 @@
 cd transit
 cp .env.example .env  # supply a strong NEO4J_PASSWORD, never commit .env
 docker compose -f compose.yml up --build
-# UI      http://localhost:5177
-# API     http://localhost:4100/api/health
-# Neo4j   http://localhost:7475   (loopback only)
+# The compose file expects an existing Neo4j runtime named `gis-graph` and
+# an existing Fridge web network. For an isolated local run, provide those
+# external networks or use a local Neo4j endpoint in `.env`.
+# App/API: http://localhost:4100
 ```
 
-`/api/health` reports whether the driver can connect; UI's sample graph is intentionally clearly labeled. To initialize indexes/constraints after Neo4j starts, run `cat graph/schema.cypher | docker compose -f compose.yml exec -T neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD"` from a shell with the password set; consider using the env file carefully to avoid exposing secrets in command history.
+`/api/health` reports whether the driver can connect; UI's sample graph is intentionally clearly labeled. Initialize indexes/constraints once against the shared Neo4j runtime with an administrator-approved `cypher-shell` session.
 
 ## Stages
 
