@@ -7,7 +7,10 @@ import { driver, graphReady } from './graph.js';
 import {
   alertedRoutes, alertsFor, arrivalsAt, bus, realtimeState, startRealtimeCollector, stopRealtimeCollector, vehicleSnapshot,
 } from './realtime.js';
-import { lineDetail, lineSummaries, scheduleNetwork, stationDetail } from './schedule.js';
+import { lineDetail, lineSummaries, scheduleNetwork, serverIndex, stationDetail } from './schedule.js';
+import { legDeltas } from './realtime.js';
+import { plan, plannerReady } from './planner.js';
+import { linesGeoJSON, search, searchNode, stationsGeoJSON } from './search.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -65,6 +68,52 @@ app.get('/api/alerts', (req, res) => res.json(alertsFor({
 })));
 app.get('/api/realtime', (_req, res) => res.json(realtimeState()));
 
+// ---- search ----------------------------------------------------------------------------------------
+const qs = (v: unknown) => (typeof v === 'string' ? v : '');
+app.get('/api/search', (req, res) => {
+  const q = qs(req.query.q || req.query.s);
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 12));
+  res.json({ q, results: search(q, limit) });
+});
+// fridge.run search node (go.fridge.run search asks GET /transit/__search?s=)
+app.get('/__search', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(searchNode(qs(req.query.s || req.query.q))); });
+
+// ---- journey planning: schedule first, realtime only on request -----------------------------------
+app.get('/api/plan', (req, res) => {
+  const from = qs(req.query.from), to = qs(req.query.to);
+  if (!from || !to) { res.status(400).json({ error: 'from_and_to_required' }); return; }
+  if (!plannerReady()) { res.status(503).json({ error: 'timetable_unavailable' }); return; }
+  const at = Number(req.query.at) || Math.floor(Date.now() / 1000);
+  const t0 = Date.now();
+  const out = plan(from, to, at, serverIndex()?.stopParent ?? {}, Math.max(1, Math.min(5, Number(req.query.count) || 3)));
+  if ('error' in out) { res.status(out.error === 'unknown_place' ? 404 : 400).json(out); return; }
+  res.json({ ...out, ms: Date.now() - t0 });
+});
+// The live check of a planned journey: ?legs=trip|fromStation|toStation|schedDep|schedArr|route,...
+app.get('/api/plan/live', (req, res) => {
+  const legs = qs(req.query.legs).split(',').filter(Boolean).slice(0, 12).map(x => {
+    const [trip, from, to, dep, arr, route] = x.split('|');
+    return { trip, from, to, dep: Number(dep), arr: Number(arr), route: route ?? '' };
+  }).filter(l => l.trip && l.from && l.to);
+  res.json(legDeltas(legs));
+});
+
+// ---- GeoJSON for other fridge apps (WingMaps' Charlie Maps plugin) ---------------------------------
+app.get('/api/geo/lines.geojson', (_req, res) => { const g = linesGeoJSON(); if (!g) { res.status(503).end(); return; } res.setHeader('Cache-Control', 'private, max-age=600'); res.type('application/geo+json').json(g); });
+app.get('/api/geo/stations.geojson', (_req, res) => { const g = stationsGeoJSON(); if (!g) { res.status(503).end(); return; } res.setHeader('Cache-Control', 'private, max-age=600'); res.type('application/geo+json').json(g); });
+app.get('/api/geo/vehicles.geojson', (req, res) => {
+  const snap = vehicleSnapshot(qs(req.query.route) || undefined);
+  const routes = serverIndex()?.routes ?? {};
+  res.type('application/geo+json').json({
+    type: 'FeatureCollection', asOf: snap.asOf, live: snap.live,
+    features: snap.live ? snap.vehicles.map(v => ({
+      type: 'Feature', id: v.id,
+      properties: { id: v.id, label: v.label, route: v.route, color: routes[v.route]?.color ?? '#7C878E', mode: routes[v.route]?.mode ?? '', bearing: v.bearing, status: v.status, station: v.station, ts: v.ts },
+      geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
+    })) : [],
+  });
+});
+
 // Server-sent events: one stream per open map. The server pushes each fresh vehicles snapshot
 // and an alerts-changed ping; the browser never polls MBTA.
 let streams = 0;
@@ -108,6 +157,7 @@ function appbar(req: Request) {
   const signout = user ? '<a class="btn small signout" href="https://go.fridge.run/logout" title="Sign out">🚪<span class="lbl"> Sign out</span></a>' : '';
   return `<header class="appbar">
     <a class="brand" href="https://go.fridge.run/"><img src="${ASSETS}/logo-mark.png" srcset="${ASSETS}/logo-mark@2x.png 2x" width="42" height="48" alt=""><span><b class="app-name">Charlie Maps</b> <span class="house">· fridge.run</span></span></a>
+    <div class="cm-bar-search" id="cm-bar-search"></div>
     ${chip}
     <div class="me">
       <a class="back-btn" href="https://fridge.run/" title="Back to fridge.run"><picture><source type="image/webp" srcset="${ASSETS}/back-button.webp 1x, ${ASSETS}/back-button@2x.webp 2x"><img src="${ASSETS}/back-button.png" srcset="${ASSETS}/back-button@2x.png 2x" width="154" height="36" alt="Back to fridge.run"></picture></a>
@@ -122,8 +172,10 @@ function page(req: Request, res: Response) {
 }
 
 app.get(['/', '/index.html'], page);
+app.use('/data', (req, res, next) => { if (/^\/(schedule|server)\.json/.test(req.path)) { res.status(404).end(); return; } next(); });
 app.use('/data', express.static(path.join(webRoot, 'data'), { maxAge: '10m' }));
 app.use('/assets', express.static(path.join(webRoot, 'assets'), { immutable: true, maxAge: '365d' }));
+app.use((req, res, next) => { if (req.path.startsWith('/data/')) { res.status(404).end(); return; } next(); });
 app.use(express.static(webRoot, { index: false, maxAge: '1h' }));
 app.get('*', page); // deep links (?line=Red) and any client view
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -133,6 +185,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 const server = app.listen(port, '0.0.0.0', () => console.log('Charlie Maps API on :' + port));
 startRealtimeCollector();
+setTimeout(() => { const t = Date.now(); if (plannerReady()) { plan('place-pktrm', 'place-harsq', Math.floor(Date.now() / 1000), serverIndex()?.stopParent ?? {}, 1); console.log(`planner warm in ${Date.now() - t} ms`); } }, 2000);
 async function close() {
   stopRealtimeCollector();
   server.close();

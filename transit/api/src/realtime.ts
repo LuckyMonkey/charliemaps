@@ -40,6 +40,8 @@ const failures = new Map<FeedKey, number>();
 let vehicles: Vehicle[] = [];
 let vehiclesTime = 0;
 let arrivalsByStation = new Map<string, Arrival[]>();
+/** trip id -> station id -> predicted time (s) and status; for checking a planned trip later. */
+let tripPredictions = new Map<string, { cancelled: boolean; vehicle: string | null; stops: Map<string, { time: number; status: string }> }>();
 let tripTime = 0;
 let alerts: Alert[] = [];
 let alertsTime = 0;
@@ -80,6 +82,7 @@ function parseTripUpdates(body: any) {
   tripTime = Number(body?.header?.timestamp) || 0;
   const idx = serverIndex();
   const by = new Map<string, Arrival[]>();
+  const trips = new Map<string, { cancelled: boolean; vehicle: string | null; stops: Map<string, { time: number; status: string }> }>();
   const floor = nowS() - 30;
   for (const e of body?.entity ?? []) {
     const tu = e.trip_update;
@@ -92,6 +95,15 @@ function parseTripUpdates(body: any) {
       || idx?.directionDestination[`${route}|${dir}`] || '';
     const cancelled = trip.schedule_relationship === 'CANCELED';
     const updates: any[] = tu.stop_time_update ?? [];
+    const tstops = new Map<string, { time: number; status: string }>();
+    trips.set(String(trip.trip_id ?? ''), { cancelled, vehicle: tu.vehicle?.label ?? null, stops: tstops });
+    for (const u of updates) {
+      const st = stationOf(u.stop_id);
+      const t = Number((u.departure ?? u.arrival)?.time);
+      const ta = Number((u.arrival ?? u.departure)?.time);
+      if (st) tstops.set(st, { time: t || ta || 0, status: u.schedule_relationship === 'SKIPPED' ? 'skipped' : 'predicted' });
+      if (st && ta) tstops.set(`${st}#arr`, { time: ta, status: u.schedule_relationship === 'SKIPPED' ? 'skipped' : 'predicted' });
+    }
     updates.forEach((u, i) => {
       const last = i === updates.length - 1;
       // At the last stop a train arrives; elsewhere people care when it leaves.
@@ -112,6 +124,7 @@ function parseTripUpdates(body: any) {
   }
   for (const list of by.values()) list.sort((a, b) => a.time - b.time);
   arrivalsByStation = by;
+  tripPredictions = trips;
 }
 
 function parseAlerts(body: any) {
@@ -230,4 +243,46 @@ export function alertedRoutes() {
     for (const r of a.routes) out[r] = Math.max(out[r] ?? 0, a.severity);
   }
   return out;
+}
+
+/**
+ * Realtime check of a planned journey: for each ride leg (trip, board station, alight station, scheduled times)
+ * the MBTA prediction, if any. delta = predicted - scheduled (s). No prediction is "no data", never "on time".
+ */
+export function legDeltas(legs: { trip: string; from: string; to: string; dep: number; arr: number; route: string }[]) {
+  const live = fresh(tripTime);
+  return {
+    asOf: tripTime || null, live,
+    legs: legs.map(l => {
+      const p = tripPredictions.get(l.trip);
+      const v = vehicles.find(x => x.trip === l.trip) ?? null;
+      const dep = p?.stops.get(l.from);
+      const arr = p?.stops.get(`${l.to}#arr`) ?? p?.stops.get(l.to);
+      const status = !live ? 'unavailable' : p?.cancelled ? 'cancelled' : dep?.status === 'skipped' ? 'skipped' : (dep || arr) ? 'predicted' : 'no_prediction';
+      // The planned trip has no live data or is cancelled (MBTA often swaps scheduled subway trips for
+      // ADDED ones): offer the next predicted vehicle of the same route from the same stop that also
+      // calls at the leg's destination.
+      let instead: { trip: string; dep: number; arr: number | null; vehicle: string | null } | null = null;
+      if (live && status !== 'predicted') {
+        const now = nowS();
+        for (const a of arrivalsByStation.get(l.from) ?? []) {
+          if (a.route !== l.route || a.time < now || a.status !== 'predicted' || a.trip === l.trip) continue;
+          const tp = tripPredictions.get(a.trip);
+          const end = tp?.stops.get(`${l.to}#arr`) ?? tp?.stops.get(l.to);
+          if (!end || end.time <= a.time) continue;
+          instead = { trip: a.trip, dep: a.time, arr: end.time, vehicle: a.vehicle };
+          break;
+        }
+      }
+      return {
+        instead,
+        trip: l.trip, status,
+        depPredicted: dep?.time ?? null, arrPredicted: arr?.time ?? null,
+        depDelta: dep?.time ? dep.time - l.dep : null, arrDelta: arr?.time ? arr.time - l.arr : null,
+        vehicle: v ? { label: v.label, lat: v.lat, lon: v.lon, status: v.status, station: v.station, ts: v.ts } : null,
+        alerts: alerts.filter(a => a.routes.includes(l.route) && (a.stations.length === 0 || a.stations.includes(l.from) || a.stations.includes(l.to)))
+          .slice(0, 3).map(a => ({ id: a.id, header: a.header, severity: a.severity, effect: a.effect })),
+      };
+    }),
+  };
 }

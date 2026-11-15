@@ -75,9 +75,20 @@ export function stationDetail(id: string) {
   if (i === undefined || !network) return null;
   const s = network.stations[i];
   const p = network.projection;
+  // Bus stops a short walk away (across the street, the busway, the next corner) and what calls there.
+  const nearby: { id: string; name: string; meters: number; lines: { id: string; short: string; name: string; color: string; mode: string }[] }[] = [];
+  for (const o of network.stations) {
+    if (o === s) continue;
+    const d = Math.hypot(o.x - s.x, o.y - s.y);
+    if (d > 260 || !o.modes.includes('bus') && !o.modes.includes('silver')) continue;
+    nearby.push({ id: o.id, name: o.name, meters: Math.round(d), lines: o.lines.map(li => network!.lines[li]).map(l => ({ id: l.id, short: l.short, name: l.name, color: l.color, mode: l.mode })) });
+  }
+  nearby.sort((a, b) => a.meters - b.meters);
   return {
+    nearby: nearby.slice(0, 16),
     id: s.id, name: s.name, municipality: s.muni, accessible: s.acc,
     lat: +(p.lat0 - s.y / p.ky).toFixed(6), lon: +(p.lon0 + s.x / p.kx).toFixed(6),
     lines: s.lines.map(li => ({ id: network!.lines[li].id, name: network!.lines[li].name, short: network!.lines[li].short, mode: network!.lines[li].mode, color: network!.lines[li].color })),
+    kind: s.modes.every(m => m === 'bus') || (s.modes[0] === 'silver' && !s.parent) ? 'stop' : 'station',
   };
 }

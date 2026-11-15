@@ -134,3 +134,73 @@ html .cm-panel .cm-notices { display: block; margin: 8px 0; font-size: 13px; fon
   .cm-credit { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .cm-toggle, .cm-line, .cm-strip button { transition: none; } }
+
+/* ---- 0.3: bar search, trip, line stage, chooser, plan ---- */
+.cm-bar-search { flex: 1 1 260px; display: flex; min-width: 0; max-width: 560px; }
+.cm-bar-search .fsearch { margin: 0 4px; height: 40px; flex: 1; }
+.cm-fsearch .fsearch-list { text-align: left; }
+.cm-fsearch .fsearch-group > ul { padding-left: 6px; }
+@media (max-width: 720px) { .cm-bar-search { order: 3; flex-basis: 100%; max-width: none; } .cm-bar-search .fsearch { margin: 6px 0 0; } }
+
+.cm-trip { flex: 1; display: grid; gap: 6px; min-width: 0; }
+.cm-slot { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 10px; border-radius: 12px; border: 1px solid var(--edge); background: var(--paper-2); font-size: 14px; }
+.cm-slot.next { border-color: var(--mint); box-shadow: 0 0 0 3px rgba(43, 181, 156, .18); background: #fff; }
+.cm-slot.set { background: #fff; }
+.cm-slot-name { flex: 1; min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-slot-hint { flex: 1; color: var(--dim); font-size: 13px; }
+html .cm-panel .cm-x { text-decoration: none; color: var(--dim); font-weight: 500; font-size: 13px; padding: 2px 4px; }
+.cm-trip-tools { display: flex; gap: 12px; justify-content: flex-end; }
+html .cm-panel .cm-tool { font-size: 12.5px; font-weight: 600; }
+.cm-pin { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 800; margin-left: 6px; line-height: 1; }
+.cm-pin.a { background: #1e8f7a; } .cm-pin.b { background: #1d1d1f; }
+.cm-slot .cm-pin { margin-left: 0; }
+
+/* the map folds away behind the straightened line */
+.cm-canvas { transition: opacity .28s ease, filter .28s ease; }
+.cm-canvas.folded { opacity: .12; filter: saturate(.3); pointer-events: none; }
+.cm-linestage { position: absolute; inset: 0; z-index: 6; overflow-y: auto; overscroll-behavior: contain; background: rgba(251, 250, 246, 0); transition: background-color .28s ease; }
+.cm-linestage.in { background: rgba(251, 250, 246, .96); }
+.cm-ls-head { position: sticky; top: 0; z-index: 2; max-width: 760px; margin: 0 auto; padding: 16px 20px 10px; background: rgba(251, 250, 246, .97); border-bottom: 1px solid var(--paper-3); opacity: 0; transition: opacity .25s ease .1s; }
+.cm-linestage.in .cm-ls-head { opacity: 1; }
+.cm-ls-head .cm-title { font-size: 26px; }
+.cm-ls-strip { list-style: none; max-width: 760px; margin: 0 auto; padding: 10px 20px 60px; }
+.cm-ls-strip > li { position: relative; }
+.cm-ls-strip > li::before { content: ""; position: absolute; left: 27px; top: 0; bottom: 0; width: 10px; background: var(--line); transform-origin: top; transform: scaleY(0); transition: transform .36s cubic-bezier(.2, .8, .2, 1) .08s; }
+.cm-linestage.in .cm-ls-strip > li::before { transform: scaleY(1); }
+.cm-ls-strip > li:first-child::before { top: 26px; }
+.cm-ls-strip > li:last-child::before { bottom: auto; height: 26px; }
+html .cm-linestage .cm-ls-row { all: unset; box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 52px; padding: 6px 10px 6px 14px; border-radius: 14px; cursor: pointer; color: var(--ink); }
+html .cm-linestage .cm-ls-row:hover, html .cm-linestage .cm-ls-row:focus-visible, .cm-ls-strip > li.open > .cm-ls-row { background: color-mix(in srgb, var(--line) 10%, transparent); }
+.cm-ls-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px; margin-left: 4px; border-radius: 50%; background: #fff; border: 3.5px solid #1d1d1f; transition: transform .42s cubic-bezier(.2, .8, .2, 1); }
+.cm-ls-strip > li.transfer .cm-ls-dot { width: 24px; height: 24px; margin-left: 1px; border-width: 4px; }
+.cm-ls-name { flex: 1; font-size: 17px; opacity: 0; transition: opacity .25s ease .18s; }
+.cm-linestage.in .cm-ls-name, .cm-linestage.in .cm-conn { opacity: 1; }
+.cm-ls-strip .cm-conn { opacity: 0; transition: opacity .25s ease .22s; }
+.cm-ls-strip > li.transfer .cm-ls-name { font-weight: 750; }
+.cm-ls-name .cm-pin { vertical-align: middle; }
+.cm-ls-choose { margin: 4px 0 12px 52px; padding: 14px; background: #fff; border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow); }
+.cm-linestage.leaving .cm-ls-choose { display: none; }
+
+.cm-chooser .cm-pick { width: 100%; margin: 10px 0 4px; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 15px; }
+.cm-chooser .cm-pick .cm-pin { width: 20px; height: 20px; font-size: 10px; }
+.cm-nearby { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+html .cm-near { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--paper-3); color: var(--ink); }
+html .cm-near:hover, html .cm-near:focus-visible { border-color: #c99700; background: #fffaf0; }
+.cm-near-name { font-size: 14px; font-weight: 600; }
+.cm-near-name small { color: var(--dim); font-weight: 500; }
+.cm-near-lines { display: flex; flex-wrap: wrap; gap: 3px; }
+
+.cm-plan .cm-title { font-size: 19px; }
+.cm-summary { margin: 8px 0; font-size: 15px; }
+.cm-legs { list-style: none; margin: 8px 0 0; padding: 0; }
+.cm-legs li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--paper-3); }
+.cm-legs li.ride { border-left: 5px solid var(--line); padding-left: 8px; }
+.cm-legs li.walk { color: var(--ink-2); font-size: 14px; padding-left: 13px; }
+.cm-leg-body { flex: 1; display: grid; gap: 2px; font-size: 14px; }
+.cm-leg-ico { width: 22px; text-align: center; }
+.cm-live { margin-top: 4px; font-size: 13px; }
+.cm-live .chip { background: #fff; border: 1px solid var(--edge); }
+.cm-leg-alert { margin: 6px 0 0; padding: 6px 8px; font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) {
+  .cm-canvas, .cm-linestage, .cm-ls-head, .cm-ls-strip > li::before, .cm-ls-dot, .cm-ls-name, .cm-ls-strip .cm-conn { transition: none !important; }
+}

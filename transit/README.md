@@ -60,11 +60,22 @@ docker compose -f compose.yml up --build
 5. **Production UI**: use actual graph projections and live SSE, no demo labels; full schematic/line/station drilldown, ETA-at-pointer and touch equivalent, accessible 5-foot mode.
 6. **Fridge integration**: Caddy routing and login are supplied by the Fridge deployment; production data ingestion remains a separate milestone.
 
+## Trips (0.3.0)
+
+Click a line: the map folds into that line's vertical diagram (each station slides from its place on
+the map into the straight line). Click a station: **Start here (A)** / **Go here (B)**, or one of the bus
+stops next to it. Back on the map, do the same for B. Ctrl+K anywhere: type a station, stop or route;
+Enter picks the first result. With A and B set, the plan is computed from the **timetable, now**
+(`/api/plan`: Connection Scan over today's service, transfers with 90 s slack, footpaths up to 320 m,
+walks from `transfers.txt`). Only after that does the page ask `/api/plan/live` about those exact trips
+(delay, cancellation, the replacement vehicle MBTA added, the vehicle's position, alerts).
+
 ## Map data (rebuild when the feed changes)
 
 ```bash
 # 1. the schedule projection: network.json (browser) + server.json (API lookup index)
 python3 -I tools/build-network-data.py /path/to/MBTA_GTFS.zip
+python3 -I tools/build-schedule.py /path/to/MBTA_GTFS.zip    # the planner's timetable (server only)
 # 2. the land/water backdrop (rarely): Overpass queries are in the script's docstring
 python3 -I tools/build-basemap.py coast.json water.json
 ```
@@ -87,6 +98,11 @@ All JSON, `Cache-Control: no-store`, every realtime answer carries `asOf` (feed 
 | `GET /api/vehicles[?route=]` | live vehicle positions (revenue service only) |
 | `GET /api/arrivals?station=` | next departures at a station |
 | `GET /api/alerts[?route=&station=]` | active alerts |
+| `GET /api/search?q=` | stations, stops and routes by name or number |
+| `GET /api/plan?from=&to=[&at=epoch]` | itineraries from the timetable (schedule only) |
+| `GET /api/plan/live?legs=trip\|from\|to\|dep\|arr\|route,...` | realtime check of planned legs: delay, cancelled, replacement, vehicle, alerts |
+| `GET /api/geo/{lines,stations,vehicles}.geojson` | GeoJSON for other fridge apps (WingMaps' Charlie Maps plugin) |
+| `GET /__search?s=` | the fridge.run search node (go.fridge.run search) |
 | `GET /api/events` | SSE: `vehicles` (every fresh snapshot, ~15 s), `alerts`, `predictions` pings |
 
 The collector polls `VehiclePositions` every 15 s, `TripUpdates` every 30 s and `Alerts` every 60 s,
