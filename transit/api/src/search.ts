@@ -1,11 +1,13 @@
 // Search over the schedule projection (stations, stops, routes), and the GeoJSON layers other
 // fridge apps draw (WingMaps' Charlie Maps plugin). Pure functions over network.json.
 import { scheduleNetwork, type NetLine, type NetStation } from './schedule.js';
+import { nextByRoute } from './realtime.js';
 
 export type SearchHit = {
   type: 'station' | 'stop' | 'route'; id: string; name: string; detail: string; mode: string;
   lines: { id: string; short: string; name: string; color: string; mode: string }[];
   lat: number | null; lon: number | null; score: number;
+  next?: { route: string; short: string; color: string; mode: string; to: string; time: number }[];
 };
 
 const MODE_LABEL: Record<string, string> = { subway: 'Subway', mattapan: 'Mattapan Trolley', silver: 'Silver Line', rail: 'Commuter Rail', ferry: 'Ferry', bus: 'Bus' };
@@ -77,16 +79,51 @@ export function search(q: string, limit = 12): SearchHit[] {
   return out.slice(0, limit);
 }
 
+/** Search + the next departures (live) for the first few stations and stops. */
+export function searchWithArrivals(q: string, limit = 12, withNext = 6) {
+  const net = scheduleNetwork();
+  const hits = search(q, limit);
+  let n = 0;
+  for (const h of hits) {
+    if (h.type === 'route' || n >= withNext) continue;
+    n++;
+    h.next = nextByRoute(h.id, 4).map(a => {
+      const l = net?.lines.find(x => x.id === a.route);
+      return { route: a.route, short: l?.short || l?.name.replace(/ Line$/, '') || a.route, color: l?.color ?? '#7C878E', mode: l?.mode ?? 'bus', to: a.to, time: a.time };
+    });
+  }
+  return hits;
+}
+
+/** A coloured circle per line, for places that only show text (go.fridge.run search). */
+export function dotFor(color: string, mode: string) {
+  if (mode === 'bus') return '🟡';
+  if (mode === 'rail') return '🟣';
+  if (mode === 'silver') return '⚪';
+  const c = color.toUpperCase();
+  if (c === '#DA291C') return '🔴';
+  if (c === '#ED8B00') return '🟠';
+  if (c === '#00843D') return '🟢';
+  if (c === '#003DA5' || c === '#008EAA' || c === '#006595') return '🔵';
+  return '⚫';
+}
+
 /** fridge.run search node answer (fridge-go src/search.php): {app, items:[{title,type,link,detail,path}]}. */
 export function searchNode(q: string) {
-  const items = search(q, 20).map(h => {
+  const mins = (t: number) => { const m = Math.round((t * 1000 - Date.now()) / 60000); return m <= 0 ? 'now' : `${m} min`; };
+  const items = searchWithArrivals(q, 20, 8).map(h => {
     const link = h.type === 'route' ? `/transit/?line=${encodeURIComponent(h.id)}` : `/transit/?station=${encodeURIComponent(h.id)}`;
-    const lines = h.lines.filter(l => l.mode !== 'bus').map(l => l.short || l.name.replace(/ Line$/, '')).slice(0, 5);
+    const rapid = h.lines.filter(l => l.mode !== 'bus');
+    const dots = h.type === 'route'
+      ? dotFor(h.lines[0]?.color ?? '', h.mode)
+      : [...new Set(rapid.map(l => dotFor(l.color, l.mode)))].join('') + (h.lines.some(l => l.mode === 'bus') ? '🟡' : '');
+    const lines = rapid.map(l => l.short || l.name.replace(/ Line$/, '')).slice(0, 5);
     const buses = h.lines.filter(l => l.mode === 'bus').map(l => l.short).slice(0, 6);
-    const emoji = h.type === 'route' ? (h.mode === 'bus' ? '🚌' : h.mode === 'rail' ? '🚆' : h.mode === 'ferry' ? '⛴️' : '🚇') : h.type === 'stop' ? '🚏' : '🚉';
+    const next = (h.next ?? []).map(a => `${a.short} → ${a.to || '…'} ${mins(a.time)}`).join(' · ');
     return {
-      title: `${emoji} ${h.name}`, type: h.type, link,
-      detail: h.type === 'route' ? h.detail : [h.detail, lines.join(', '), buses.length ? `🚌 ${buses.join(' ')}` : ''].filter(Boolean).join(' · '),
+      title: `${dots || '⚫'} ${h.name}`, type: h.type, link,
+      detail: h.type === 'route' ? h.detail
+        : next ? `Next: ${next}` : [h.detail, lines.join(', '), buses.length ? `bus ${buses.join(' ')}` : ''].filter(Boolean).join(' · '),
       path: h.type === 'route' ? ['Routes', h.detail] : [h.type === 'stop' ? 'Bus stops' : 'Stations'],
     };
   });

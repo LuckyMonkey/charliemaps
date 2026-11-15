@@ -8,9 +8,9 @@ import {
   alertedRoutes, alertsFor, arrivalsAt, bus, realtimeState, startRealtimeCollector, stopRealtimeCollector, vehicleSnapshot,
 } from './realtime.js';
 import { lineDetail, lineSummaries, scheduleNetwork, serverIndex, stationDetail } from './schedule.js';
-import { legDeltas } from './realtime.js';
+import { legDeltas, vehicleDetail } from './realtime.js';
 import { plan, plannerReady } from './planner.js';
-import { linesGeoJSON, search, searchNode, stationsGeoJSON } from './search.js';
+import { linesGeoJSON, searchNode, searchWithArrivals, stationsGeoJSON } from './search.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -56,6 +56,11 @@ app.get('/api/stations/:id', (req, res) => {
   if (!station) { res.status(404).json({ error: 'unknown_station' }); return; }
   res.json({ ...station, arrivals: arrivalsAt(station.id), alerts: alertsFor({ station: station.id }) });
 });
+app.get('/api/vehicles/:id', (req, res) => {
+  const d = vehicleDetail(req.params.id);
+  if (!d) { res.status(404).json({ error: 'not_running' }); return; }
+  res.json(d);
+});
 app.get('/api/vehicles', (req, res) => res.json(vehicleSnapshot(typeof req.query.route === 'string' ? req.query.route : undefined)));
 app.get('/api/arrivals', (req, res) => {
   const station = typeof req.query.station === 'string' ? req.query.station : '';
@@ -73,7 +78,7 @@ const qs = (v: unknown) => (typeof v === 'string' ? v : '');
 app.get('/api/search', (req, res) => {
   const q = qs(req.query.q || req.query.s);
   const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 12));
-  res.json({ q, results: search(q, limit) });
+  res.json({ q, results: searchWithArrivals(q, limit, req.query.next === '0' ? 0 : 6) });
 });
 // fridge.run search node (go.fridge.run search asks GET /transit/__search?s=)
 app.get('/__search', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(searchNode(qs(req.query.s || req.query.q))); });

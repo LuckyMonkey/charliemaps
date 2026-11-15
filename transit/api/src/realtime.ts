@@ -41,7 +41,7 @@ let vehicles: Vehicle[] = [];
 let vehiclesTime = 0;
 let arrivalsByStation = new Map<string, Arrival[]>();
 /** trip id -> station id -> predicted time (s) and status; for checking a planned trip later. */
-let tripPredictions = new Map<string, { cancelled: boolean; vehicle: string | null; stops: Map<string, { time: number; status: string }> }>();
+let tripPredictions = new Map<string, { cancelled: boolean; vehicle: string | null; route: string; to: string; stops: Map<string, { time: number; status: string }>; order: { station: string; time: number; status: string }[] }>();
 let tripTime = 0;
 let alerts: Alert[] = [];
 let alertsTime = 0;
@@ -82,7 +82,7 @@ function parseTripUpdates(body: any) {
   tripTime = Number(body?.header?.timestamp) || 0;
   const idx = serverIndex();
   const by = new Map<string, Arrival[]>();
-  const trips = new Map<string, { cancelled: boolean; vehicle: string | null; stops: Map<string, { time: number; status: string }> }>();
+  const trips: typeof tripPredictions = new Map();
   const floor = nowS() - 30;
   for (const e of body?.entity ?? []) {
     const tu = e.trip_update;
@@ -96,11 +96,13 @@ function parseTripUpdates(body: any) {
     const cancelled = trip.schedule_relationship === 'CANCELED';
     const updates: any[] = tu.stop_time_update ?? [];
     const tstops = new Map<string, { time: number; status: string }>();
-    trips.set(String(trip.trip_id ?? ''), { cancelled, vehicle: tu.vehicle?.label ?? null, stops: tstops });
+    const order: { station: string; time: number; status: string }[] = [];
+    trips.set(String(trip.trip_id ?? ''), { cancelled, vehicle: tu.vehicle?.label ?? null, route, to, stops: tstops, order });
     for (const u of updates) {
       const st = stationOf(u.stop_id);
       const t = Number((u.departure ?? u.arrival)?.time);
       const ta = Number((u.arrival ?? u.departure)?.time);
+      if (st && (ta || t)) order.push({ station: st, time: ta || t, status: u.schedule_relationship === 'SKIPPED' ? 'skipped' : 'predicted' });
       if (st) tstops.set(st, { time: t || ta || 0, status: u.schedule_relationship === 'SKIPPED' ? 'skipped' : 'predicted' });
       if (st && ta) tstops.set(`${st}#arr`, { time: ta, status: u.schedule_relationship === 'SKIPPED' ? 'skipped' : 'predicted' });
     }
@@ -285,4 +287,33 @@ export function legDeltas(legs: { trip: string; from: string; to: string; dep: n
       };
     }),
   };
+}
+
+/** One vehicle: where it is and its next stops (MBTA predictions for its trip), for "follow this train". */
+export function vehicleDetail(id: string) {
+  const v = vehicles.find(x => x.id === id || x.label === id);
+  if (!v) return null;
+  const p = tripPredictions.get(v.trip);
+  const now = nowS() - 30;
+  return {
+    asOf: vehiclesTime || null, live: fresh(vehiclesTime), vehicle: v,
+    to: p?.to || serverIndex()?.directionDestination[`${v.route}|${v.dir}`] || '',
+    next: (p?.order ?? []).filter(s => s.time >= now).slice(0, 12),
+  };
+}
+
+/** Next departures at a station, one per route + destination (for search results). */
+export function nextByRoute(station: string, groups = 4) {
+  if (!fresh(tripTime)) return [];
+  const out: { route: string; to: string; time: number }[] = [];
+  const seen = new Set<string>();
+  for (const a of arrivalsByStation.get(station) ?? []) {
+    if (a.time < nowS() - 30 || a.status !== 'predicted') continue;
+    const k = `${a.route}|${a.to}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ route: a.route, to: a.to, time: a.time });
+    if (out.length >= groups) break;
+  }
+  return out;
 }

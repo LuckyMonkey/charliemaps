@@ -95,13 +95,15 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState<Sel>({ line: null, branch: 0, station: null, a: null, b: null });
   const [layers, setLayers] = useState<Set<Layer>>(() => new Set(['subway', 'rail', 'ferry', 'bus', 'live']));
-  const [big, setBig] = useState(false);
+  const big = false;
   const [vehicles, setVehicles] = useState<{ live: boolean; asOf: number | null; list: Vehicle[] }>({ live: false, asOf: null, list: [] });
   const [alerted, setAlerted] = useState<Record<string, number>>({});
   const [tip, setTip] = useState<{ hit: Hit; x: number; y: number } | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [morph, setMorph] = useState<{ line: string; origins: Record<number, [number, number]> } | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
+  const [followId, setFollowId] = useState<string | null>(null);
+  const [following, setFollowing] = useState(true);
   const mapRef = useRef<MapView | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<View | null>(null);
@@ -174,7 +176,7 @@ export default function App() {
         if (!hit) { update({ station: null }); return; }
         if (hit.kind === 'station') update({ station: hit.station.id });
         else if (hit.kind === 'line') openLine(hit.line.id);
-        else if (hit.kind === 'vehicle') openLine(hit.vehicle.route);
+        else if (hit.kind === 'vehicle') { setFollowId(hit.vehicle.id); setFollowing(true); update({ station: null }); }
       },
       onHover: (hit, x, y) => setTip(hit ? { hit, x, y } : null),
       onView: view => { viewRef.current = view; writeUrl(selRef.current, view, false); },
@@ -212,8 +214,26 @@ export default function App() {
   useEffect(() => {
     const m = mapRef.current;
     if (!m) return;
-    m.vehicles = vehicles.list; m.vehiclesLive = vehicles.live; m.invalidate();
+    m.setVehicles(vehicles.list, vehicles.live);
   }, [vehicles, net]);
+  // Follow the chosen train or bus: the camera glides with it on every update (drag the map to pause).
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m) return;
+    m.selectedVehicle = followId;
+    m.invalidate();
+    if (!followId || !following) return;
+    const v = vehicles.list.find(x => x.id === followId);
+    if (v && !m.interacting) m.flyTo({ cx: v.x, cy: v.y, scale: Math.max(m.view.scale, 0.09) }, true, 1200);
+  }, [vehicles, followId, following]);
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const pause = () => setFollowing(false);
+    c.addEventListener('pointerdown', pause);
+    c.addEventListener('wheel', pause, { passive: true });
+    return () => { c.removeEventListener('pointerdown', pause); c.removeEventListener('wheel', pause); };
+  }, [net]);
 
   useEffect(() => {
     const onPop = () => { setMorph(null); setSel(readUrl(net).sel); };
@@ -278,12 +298,15 @@ export default function App() {
           <TripBar sel={sel} onClear={k => update(k === 'a' ? { a: sel.b, b: null } : { b: null })} onSwap={() => update({ a: sel.b, b: sel.a })} onReset={() => { setTraces([]); update({ a: null, b: null }); }} />
         </div>
         {panelOpen && <div className="cm-panel-body">
-          {planning
+          {followId
+            ? <VehiclePanel net={net} id={followId} following={following} onFollow={() => setFollowing(true)}
+                onLine={id => { setFollowId(null); openLine(id); }} onClose={() => setFollowId(null)} />
+            : planning
             ? <PlanView net={net} a={sel.a as Pick} b={sel.b as Pick} onTraces={setTraces} fit={fitBox} />
             : station
-              ? <StationChooser net={net} station={station} sel={sel} onPick={pick} onLine={openLine} onClose={() => update({ station: null })} />
+              ? <StationChooser net={net} station={station} sel={sel} onPick={pick} onLine={openLine} onClose={() => update({ station: null })} onCancel={() => update({ station: null })} />
               : <>
-                <Layers layers={layers} big={big} toggle={toggleLayer} setBig={setBig} />
+                <Layers layers={layers} toggle={toggleLayer} />
                 <LineList net={net} alerted={alerted} onLine={openLine} />
               </>}
         </div>}
@@ -302,7 +325,16 @@ export default function App() {
 }
 
 // ---- the bar search (the house fsearch box, in the app bar) -------------------------------------------
-type Result = { type: 'station' | 'stop' | 'route'; id: string; name: string; detail: string; mode: string; lines: MiniLine[] };
+type Result = { type: 'station' | 'stop' | 'route'; id: string; name: string; detail: string; mode: string; lines: MiniLine[];
+  next?: { route: string; short: string; color: string; mode: string; to: string; time: number }[] };
+
+/** Coloured dots for a result: one per line colour that calls there (yellow for buses). */
+function Dots({ r }: { r: Result }) {
+  const colors = r.type === 'route'
+    ? [r.mode === 'bus' ? '#FFC72C' : (r.lines[0]?.color ?? '#7C878E')]
+    : [...new Set(r.lines.filter(l => l.mode !== 'bus').map(l => l.color)), ...(r.lines.some(l => l.mode === 'bus') ? ['#FFC72C'] : [])];
+  return <span className="cm-dots" aria-hidden="true">{colors.slice(0, 5).map(c => <span key={c} className="cm-d" style={{ background: c }} />)}</span>;
+}
 
 function BarSearch({ onChoose, next }: { onChoose: (r: Result) => void; next: 'A' | 'B' }) {
   const host = document.getElementById('cm-bar-search');
@@ -330,7 +362,6 @@ function BarSearch({ onChoose, next }: { onChoose: (r: Result) => void; next: 'A
   }, [q]);
   const go = (r: Result) => { onChoose(r); setQ(''); setResults([]); setOpen(false); input.current?.blur(); };
   if (!host) return null;
-  const emoji = (r: Result) => (r.type === 'route' ? (r.mode === 'bus' ? '🚌' : r.mode === 'rail' ? '🚆' : r.mode === 'ferry' ? '⛴️' : '🚇') : r.type === 'stop' ? '🚏' : '🚉');
   return createPortal(<form className="fsearch cm-fsearch" role="search" onSubmit={e => { e.preventDefault(); if (results[active]) go(results[active]); }}>
     <span className="fsearch-icon" aria-hidden="true">🔍</span>
     <input ref={input} type="search" value={q} placeholder={`Find a station, stop or route (picks ${next})`} aria-label="Find a station, stop or route"
@@ -347,9 +378,11 @@ function BarSearch({ onChoose, next }: { onChoose: (r: Result) => void; next: 'A
       <li className="fsearch-group"><div className="fsearch-app"><b>Charlie Maps</b> <i>›</i> {results.length ? 'Enter picks the first' : 'Nothing here yet'}</div>
         <ul>{results.map((r, i) => <li key={r.type + r.id} role="option" aria-selected={i === active}>
           <a href="#" className={i === active ? 'on' : ''} onMouseDown={e => { e.preventDefault(); go(r); }}>
-            <span className="fsearch-title">{emoji(r)} {r.name}</span>
+            <span className="fsearch-title"><Dots r={r} /> {r.name}</span>
             <span className="fsearch-type">{r.type === 'route' ? 'open line' : `pick ${next}`}</span>
-            <span className="fsearch-detail">{r.detail}{r.lines.length && r.type !== 'route' ? ` · ${r.lines.slice(0, 8).map(miniLabel).join(', ')}` : ''}</span>
+            {r.next && r.next.length > 0
+              ? <span className="fsearch-detail cm-next">{r.next.map((a, k) => <span key={k}><span className="cm-d" style={{ background: a.mode === 'bus' ? '#FFC72C' : a.color }} />{a.short} → {a.to || '…'} <b>{untilNow(a.time)}</b></span>)}</span>
+              : <span className="fsearch-detail">{r.detail}{r.lines.length && r.type !== 'route' ? ` · ${r.lines.slice(0, 8).map(miniLabel).join(', ')}` : ''}</span>}
           </a>
         </li>)}</ul>
       </li>
@@ -362,26 +395,29 @@ function BarSearch({ onChoose, next }: { onChoose: (r: Result) => void; next: 'A
 
 // ---- A -> B -------------------------------------------------------------------------------------------
 function TripBar({ sel, onClear, onSwap, onReset }: { sel: Sel; onClear: (k: 'a' | 'b') => void; onSwap: () => void; onReset: () => void }) {
-  const slot = (k: 'a' | 'b', p: Pick | null) => <div className={`cm-slot${p ? ' set' : ''}${(!sel.a && k === 'a') || (sel.a && !sel.b && k === 'b') ? ' next' : ''}`}>
-    <span className={`cm-pin ${k}`}>{k.toUpperCase()}</span>
-    {p ? <><span className="cm-slot-name">{p.kind === 'stop' ? '🚏 ' : ''}{p.name}</span>
-      <button className="link cm-x" onClick={() => onClear(k)} aria-label={`Clear ${k.toUpperCase()}`}>✕</button></>
-      : <span className="cm-slot-hint">{k === 'a' ? 'Start: open a line, or Ctrl+K' : sel.a ? 'Now pick where to go' : 'Destination'}</span>}
+  // One field at a time: first "from", then "to"; once both are set, one line with Swap and Start over.
+  if (sel.a && sel.b) return <div className="cm-trip both">
+    <div className="cm-trip-line"><span className="cm-pin a">A</span><span className="cm-slot-name">{sel.a.name}</span>
+      <span className="cm-arrow">→</span><span className="cm-pin b">B</span><span className="cm-slot-name">{sel.b.name}</span></div>
+    <div className="cm-trip-tools">
+      <button className="btn small" onClick={onSwap}>⇅ Swap</button>
+      <button className="btn small" onClick={() => onClear('b')}>Change B</button>
+      <button className="btn small" onClick={onReset}>✕ Start over</button>
+    </div>
+  </div>;
+  if (sel.a) return <div className="cm-trip">
+    <div className="cm-trip-done"><span className="cm-pin a">A</span><span className="cm-slot-name">{sel.a.name}</span></div>
+    <div className="cm-slot next"><span className="cm-pin b">B</span><span className="cm-slot-hint">Where to? Open a line, tap a station, or search.</span></div>
+    <div className="cm-trip-tools"><button className="btn small" onClick={onReset}>✕ Cancel</button></div>
   </div>;
   return <div className="cm-trip">
-    {slot('a', sel.a)}
-    {slot('b', sel.b)}
-    {(sel.a || sel.b) && <div className="cm-trip-tools">
-      {sel.a && sel.b && <button className="link cm-tool" onClick={onSwap} title="Swap A and B">⇅ Swap</button>}
-      <button className="link cm-tool" onClick={onReset}>Start over</button>
-    </div>}
+    <div className="cm-slot next"><span className="cm-pin a">A</span><span className="cm-slot-hint">Where from? Open a line, tap a station, or search.</span></div>
   </div>;
 }
 
-const Layers = memo(function Layers({ layers, big, toggle, setBig }: { layers: Set<Layer>; big: boolean; toggle: (l: Layer) => void; setBig: (v: boolean) => void }) {
+const Layers = memo(function Layers({ layers, toggle }: { layers: Set<Layer>; toggle: (l: Layer) => void }) {
   return <div className="cm-layers" role="group" aria-label="Show on the map">
     {LAYERS.map(([key, emoji, label]) => <button key={key} className={`link cm-toggle${layers.has(key) ? ' on' : ''}`} aria-pressed={layers.has(key)} onClick={() => toggle(key)}>{emoji} {label}</button>)}
-    <button className={`link cm-toggle${big ? ' on' : ''}`} aria-pressed={big} onClick={() => setBig(!big)} title="Bigger type and lines, for reading from across the room">🔎 Big</button>
   </div>;
 });
 
@@ -425,11 +461,11 @@ function LineStage({ net, line, branch, sel, vehicles, alerted, origins, mapPos,
   const [open, setOpen] = useState<number | null>(null);
   const [leaving, setLeaving] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
+  const stripRef = useRef<HTMLOListElement | null>(null);
   const dots = useRef(new Map<number, HTMLElement>());
   const { data: info } = useJson<{ alerts: { alerts: AlertItem[] } }>(`${BASE}api/lines/${encodeURIComponent(line.id)}`, 60_000);
   const service = (info?.alerts.alerts ?? []).filter(a => !FACILITY.has(a.effect) && a.severity >= 3);
   const here = vehicles.list.filter(v => v.route === line.id);
-  const atStation = new Set(here.map(v => v.station).filter(Boolean) as string[]);
 
   // The morph: every station dot starts where it was on the map and slides into the straight line.
   useLayoutEffect(() => {
@@ -473,6 +509,7 @@ function LineStage({ net, line, branch, sel, vehicles, alerted, origins, mapPos,
 
   return <div ref={root} className={`cm-linestage${leaving ? ' leaving' : ''}`} style={{ '--line': line.color } as React.CSSProperties} role="dialog" aria-label={`${line.name}, straightened`}>
     <header className="cm-ls-head">
+      <button className="btn small cm-ls-close" onClick={() => leave(onClose)} aria-label="Close the line, back to the map">✕ Close</button>
       <nav className="cm-crumbs" aria-label="Where you are">
         <a href="?" onClick={e => { e.preventDefault(); leave(onClose); }}>🗺️ Map</a> › <span>{lineLabel(line)}</span>
       </nav>
@@ -487,7 +524,8 @@ function LineStage({ net, line, branch, sel, vehicles, alerted, origins, mapPos,
       </div>}
       {service.length > 0 && <Alerts alerts={service} />}
     </header>
-    <ol className="cm-ls-strip" aria-label={`${pattern.name}, stops in order`}>
+    <ol ref={stripRef} className="cm-ls-strip" aria-label={`${pattern.name}, stops in order`}>
+      <LiveOnLine net={net} line={line} stops={pattern.stops} dir={pattern.dir} vehicles={here} rows={dots} strip={stripRef} />
       {pattern.stops.map((si, k) => {
         const s = net.stations[si];
         const others = s.lines.map(li => net.lines[li]).filter(l => l !== line && l.mode !== 'bus');
@@ -496,16 +534,15 @@ function LineStage({ net, line, branch, sel, vehicles, alerted, origins, mapPos,
         return <li key={`${s.id}${k}`} className={`${s.transfer ? 'transfer' : ''}${open === k ? ' open' : ''}`}>
           <button className="link cm-ls-row" onClick={() => setOpen(open === k ? null : k)} aria-expanded={open === k}>
             <span className="cm-ls-dot" ref={el => { if (el) dots.current.set(si, el); else dots.current.delete(si); }} aria-hidden="true" />
-            <span className="cm-ls-name">{s.name}{s.acc ? <span className="cm-acc" title="Accessible"> ♿</span> : null}
+            <span className="cm-ls-name">{s.name}
               {isA && <span className="cm-pin a">A</span>}{isB && <span className="cm-pin b">B</span>}</span>
-            {atStation.has(s.id) && <span className="cm-here" title="A vehicle is here now">●</span>}
             <span className="cm-conn">
               {others.slice(0, 6).map(l => <span key={l.id} className="cm-mini" style={{ background: l.color, color: l.text }} title={l.name}>{miniLabel(l)}</span>)}
               {buses.length > 0 && <span className="cm-mini bus" title={buses.map(b => b.short).join(', ')}>🚌 {buses.length}</span>}
             </span>
           </button>
           {open === k && <div className="cm-ls-choose">
-            <StationChooser net={net} station={s} sel={sel} onPick={p => leave(() => onPick(p))} compact />
+            <StationChooser net={net} station={s} sel={sel} onPick={p => leave(() => onPick(p))} onCancel={() => setOpen(null)} compact />
           </div>}
         </li>;
       })}
@@ -514,8 +551,8 @@ function LineStage({ net, line, branch, sel, vehicles, alerted, origins, mapPos,
 }
 
 /** A station: start or end here, or at a bus stop next to it; departures below. */
-function StationChooser({ net, station, sel, onPick, onLine, onClose, compact }: {
-  net: Network; station: Station; sel: Sel; onPick: (p: Pick) => void; onLine?: (id: string) => void; onClose?: () => void; compact?: boolean;
+function StationChooser({ net, station, sel, onPick, onLine, onClose, onCancel, compact }: {
+  net: Network; station: Station; sel: Sel; onPick: (p: Pick) => void; onLine?: (id: string) => void; onClose?: () => void; onCancel?: () => void; compact?: boolean;
 }) {
   const { data, failed } = useJson<StationInfo>(`${BASE}api/stations/${encodeURIComponent(station.id)}`, 30_000);
   const target = sel.a && sel.a.id !== station.id ? 'B' : 'A';
@@ -537,12 +574,13 @@ function StationChooser({ net, station, sel, onPick, onLine, onClose, compact }:
   return <div className="cm-chooser">
     {!compact && <nav className="cm-crumbs"><a href="?" onClick={e => { e.preventDefault(); onClose?.(); }}>Lines</a> › <span>{station.name}</span></nav>}
     {!compact && <h2 className="cm-title">{kind === 'stop' ? '🚏' : '🚉'} {station.name}</h2>}
-    {!compact && <p className="cm-sub muted">{kind === 'stop' ? 'Bus stop' : 'Station'}{station.muni ? ` · ${station.muni}` : ''}{station.acc ? ' · ♿ accessible' : ''}</p>}
+    {!compact && <p className="cm-sub muted">{kind === 'stop' ? 'Bus stop' : 'Station'}{station.muni ? ` · ${station.muni}` : ''}</p>}
     <button className="primary cm-pick" onClick={() => onPick({ id: station.id, name: station.name, kind })}>
       {target === 'A' ? 'Start here' : 'Go here'} <span className={`cm-pin ${target.toLowerCase()}`}>{target}</span>
     </button>
-    {(busesHere.length > 0 || (data?.nearby.length ?? 0) > 0) && <>
-      <h3 className="cm-h">Or a bus {kind === 'stop' ? 'nearby' : 'here'}</h3>
+    {onCancel && <button className="btn small cm-cancel" onClick={onCancel}>✕ Cancel</button>}
+    {(busesHere.length > 0 || (data?.nearby.length ?? 0) > 0) && <details className="cm-fold">
+      <summary>🚌 Or take a bus {kind === 'stop' ? 'from a stop nearby' : 'from here'} <small>({(busesHere.length ? 1 : 0) + (data?.nearby.length ?? 0)} stops)</small></summary>
       <ul className="cm-nearby">
         {busesHere.length > 0 && kind === 'station' && <li>
           <button className="link cm-near" onClick={() => onPick({ id: station.id, name: `${station.name} (bus)`, kind: 'station' })}>
@@ -557,7 +595,7 @@ function StationChooser({ net, station, sel, onPick, onLine, onClose, compact }:
           </button>
         </li>)}
       </ul>
-    </>}
+    </details>}
     {!compact && rapid.length > 0 && onLine && <div className="cm-serves">
       {rapid.map(l => <button key={l.id} className="link cm-pill" style={{ background: l.color, color: l.text }} onClick={() => onLine(l.id)}>{lineLabel(l)}</button>)}
     </div>}
@@ -744,4 +782,83 @@ function NearMe({ net, onFound }: { net: Network; onFound: (s: Station, x: numbe
         if (best) onFound(best, x, y);
       }, () => setState('denied'), { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 });
     }}>{state === 'denied' ? '🚫' : '📍'}</button>;
+}
+
+
+// ---- live vehicles beside the straightened line --------------------------------------------------------
+/** Trains and buses on this line, drawn left of the rail between the stations they are between. */
+function LiveOnLine({ net, line, stops, dir, vehicles, rows, strip }: {
+  net: Network; line: Line; stops: number[]; dir: number; vehicles: Vehicle[];
+  rows: React.MutableRefObject<Map<number, HTMLElement>>; strip: React.RefObject<HTMLOListElement | null>;
+}) {
+  const [, relayout] = useState(0);
+  useEffect(() => {
+    const el = strip.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => relayout(n => n + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [strip]);
+  const el = strip.current;
+  if (!el) return null;
+  const top0 = el.getBoundingClientRect().top;
+  const centre = (si: number) => {
+    const d = rows.current.get(si);
+    if (!d) return null;
+    const r = d.getBoundingClientRect();
+    return r.top + r.height / 2 - top0;
+  };
+  const ids = stops.map(si => net.stations[si].id);
+  const items = vehicles.map(v => {
+    const k = v.station ? ids.indexOf(v.station) : -1;
+    if (k < 0) return null;
+    const here = centre(stops[k]);
+    if (here === null) return null;
+    let y = here;
+    // between the previous stop and the next one, by where the vehicle actually is
+    const towards = v.dir === null || v.dir === dir ? 1 : -1;
+    const pk = k - towards;
+    if (v.status !== 'STOPPED_AT' && pk >= 0 && pk < stops.length) {
+      const a = net.stations[stops[pk]], b = net.stations[stops[k]];
+      const prevY = centre(stops[pk]);
+      const dx = b.sx - a.sx, dy = b.sy - a.sy, den = dx * dx + dy * dy;
+      const t = den ? Math.max(0, Math.min(1, ((v.x - a.sx) * dx + (v.y - a.sy) * dy) / den)) : 0.5;
+      if (prevY !== null) y = prevY + (here - prevY) * t;
+    }
+    return { v, y, up: towards < 0 };
+  }).filter(Boolean) as { v: Vehicle; y: number; up: boolean }[];
+  return <div className="cm-live-rail" aria-label={`${items.length} vehicles on this line now`}>
+    {items.map(({ v, y, up }) => <span key={v.id} className={`cm-live-veh${line.mode === 'bus' ? ' bus' : ''}`}
+      style={{ transform: `translateY(${Math.round(y)}px)`, background: line.mode === 'bus' ? '#FFC72C' : line.color }}
+      title={`#${v.label} ${v.status === 'STOPPED_AT' ? 'at' : 'to'} ${net.stationById.get(v.station ?? '')?.name ?? ''}`}>{up ? '▲' : '▼'}</span>)}
+  </div>;
+}
+
+// ---- one vehicle, followed ---------------------------------------------------------------------------
+function VehiclePanel({ net, id, following, onFollow, onLine, onClose }: {
+  net: Network; id: string; following: boolean; onFollow: () => void; onLine: (id: string) => void; onClose: () => void;
+}) {
+  const { data, failed } = useJson<{ vehicle: Vehicle; to: string; live: boolean; next: { station: string; time: number; status: string }[] }>(`${BASE}api/vehicles/${encodeURIComponent(id)}`, 15_000);
+  const v = data?.vehicle;
+  const line = v ? net.lineById.get(v.route) : null;
+  const at = v?.station ? net.stationById.get(v.station)?.name : null;
+  return <div className="cm-vehicle">
+    <div className="cm-row-between">
+      <h2 className="cm-title">{line ? <span className="cm-bullet" style={{ background: line.mode === 'bus' ? '#FFC72C' : line.color, color: line.mode === 'bus' ? '#000' : line.text }}>{line.short || line.name.split(' ')[0]}</span> : null}
+        {line ? lineLabel(line) : 'Vehicle'} {v ? <small className="muted">#{v.label}</small> : null}</h2>
+      <button className="btn small" onClick={onClose}>✕ Close</button>
+    </div>
+    {failed && <p className="notice warn">This vehicle is not reporting any more.</p>}
+    {v && <p className="cm-sub">{data?.to ? <>towards <b>{data.to}</b> · </> : null}{v.status === 'STOPPED_AT' ? 'at' : v.status === 'INCOMING_AT' ? 'arriving at' : 'next stop'} <b>{at ?? '…'}</b></p>}
+    <div className="cm-trip-tools left">
+      {following ? <span className="chip live">Following</span> : <button className="btn small primary" onClick={onFollow}>Follow</button>}
+      {line && <button className="btn small" onClick={() => onLine(line.id)}>Open the line</button>}
+    </div>
+    {data && data.next.length > 0 && <>
+      <h3 className="cm-h">Next stops</h3>
+      <ol className="cm-nextstops">{data.next.map((n, i) => <li key={i} className={n.status === 'skipped' ? 'off' : ''}>
+        <span className="cm-ns-name">{net.stationById.get(n.station)?.name ?? n.station}</span><b>{untilNow(n.time)}</b></li>)}</ol>
+    </>}
+    <p className="cm-source muted">Drag the map to look around; Follow brings it back. Positions are the MBTA's, about every 15 seconds.</p>
+  </div>;
 }

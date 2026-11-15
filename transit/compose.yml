@@ -3,7 +3,7 @@ name: charlie-maps-transit
 services:
   transit:
     build: .
-    image: fridge-charliemaps-transit:0.3.0
+    image: fridge-charliemaps-transit:0.4.0
     container_name: charliemaps-transit
     command: ["npm", "start"]
     env_file: .env

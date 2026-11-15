@@ -56,6 +56,11 @@ export class MapView {
   big = false;
   vehicles: Vehicle[] = [];
   vehiclesLive = false;
+  selectedVehicle: string | null = null;
+  /** Each vehicle glides from its last reported position to the new one (1.2 s), never beyond it. */
+  private glideFrom = new Map<string, { x: number; y: number }>();
+  private glideStart = 0;
+  private lastPos = new Map<string, { x: number; y: number }>();
   hasBase = false;
   private linePaths = new Map<number, Path2D[]>();
   private grid = new Map<string, number[]>();
@@ -407,7 +412,8 @@ export class MapView {
       let best: Vehicle | null = null, bd = radius * radius;
       for (const v of this.vehicles) {
         if (!this.vehicleVisible(v)) continue;
-        const [sx, sy] = this.toScreen(v.x, v.y);
+        const [vx, vy] = this.vehicleXY(v);
+        const [sx, sy] = this.toScreen(vx, vy);
         const d = (sx - px) ** 2 + (sy - py) ** 2;
         if (d < bd) { bd = d; best = v; }
       }
@@ -701,7 +707,8 @@ export class MapView {
     for (const v of this.vehicles) {
       if (!this.vehicleVisible(v)) continue;
       const line = this.net.lineById.get(v.route) as Line;
-      const [x, y] = this.toScreen(v.x, v.y);
+      const [wx, wy] = this.vehicleXY(v);
+      const [x, y] = this.toScreen(wx, wy);
       if (x < -20 || y < -20 || x > this.w + 20 || y > this.h + 20) continue;
       const bus = line.mode === 'bus';
       const r = (bus ? 3.4 + Math.max(0, z - 3) * 0.6 : 5 + Math.max(0, z - 2) * 0.5) * big;
@@ -718,6 +725,12 @@ export class MapView {
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fillStyle = bus ? COLORS.bus : line.color; ctx.fill();
       ctx.lineWidth = 1.8; ctx.strokeStyle = bus ? INK : '#ffffff'; ctx.stroke();
+      if (this.selectedVehicle === v.id) {
+        ctx.beginPath(); ctx.arc(x, y, r + 7, 0, Math.PI * 2);
+        ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, r + 11, 0, Math.PI * 2);
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(43,181,156,.8)'; ctx.stroke();
+      }
       if (this.hover?.kind === 'vehicle' && this.hover.vehicle.id === v.id) {
         ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2);
         ctx.lineWidth = 2.5; ctx.strokeStyle = '#2bb59c'; ctx.stroke();
@@ -725,6 +738,34 @@ export class MapView {
     }
     ctx.globalAlpha = 1;
   }
+
+  /** Where a vehicle is drawn right now (mid-glide between two reports). */
+  vehicleXY(v: Vehicle): [number, number] {
+    const from = this.glideFrom.get(v.id);
+    if (!from) return [v.x, v.y];
+    const t = Math.min(1, (performance.now() - this.glideStart) / 1200);
+    const e = 1 - (1 - t) ** 2;
+    return [from.x + (v.x - from.x) * e, from.y + (v.y - from.y) * e];
+  }
+
+  setVehicles(list: Vehicle[], live: boolean) {
+    this.glideFrom.clear();
+    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      for (const v of list) {
+        const prev = this.lastPos.get(v.id);
+        if (prev && Math.hypot(prev.x - v.x, prev.y - v.y) < 3000) this.glideFrom.set(v.id, prev);
+      }
+    }
+    this.lastPos = new Map(list.map(v => [v.id, { x: v.x, y: v.y }]));
+    this.glideStart = performance.now();
+    this.vehicles = list;
+    this.vehiclesLive = live;
+    const tick = () => { this.invalidate(); if (performance.now() - this.glideStart < 1250) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }
+
+  /** True while the person is dragging or pinching (following pauses). */
+  get interacting() { return this.pointers.size > 0; }
 
   private drawPins() {
     const ctx = this.ctx;
