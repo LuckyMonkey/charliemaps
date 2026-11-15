@@ -8,7 +8,10 @@
 
 Charlie Maps is a **Container app** at `/transit/`, using the shared Fridge web
 network and the existing `gis-graph` Neo4j runtime. It is intentionally one
-dedicated app container; it does not bring up a second Neo4j or web stack.
+dedicated app container; it does not bring up a second Neo4j or web stack. Its
+own writable state lives at `/srv/data/charliemaps-transit`, mounted as
+`/data`; transit graph objects are namespaced by their graph labels and source
+batch identifiers.
 The route is protected by Fridge member authentication and registered in the
 Go home folders, the Fridge app catalog, and the Go changelog.
 

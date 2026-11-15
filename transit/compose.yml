@@ -12,6 +12,8 @@ services:
       NEO4J_URI: bolt://gis-graph:7687
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - /srv/data/charliemaps-transit:/data
     init: true
     mem_limit: 512m
     cpus: 1
