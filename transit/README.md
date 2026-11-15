@@ -4,6 +4,14 @@
 
 > Status: isolated transit app on `main`. The existing CharlieMaps PostGIS/photo project in the repository root is preserved unchanged. UI starts in **DEMO** mode; no real timetable import or live vehicle feed is represented as implemented yet.
 
+## Fridge integration
+
+Charlie Maps is a **Container app** at `/transit/`, using the shared Fridge web
+network and the existing `gis-graph` Neo4j runtime. It is intentionally one
+dedicated app container; it does not bring up a second Neo4j or web stack.
+The route is protected by Fridge member authentication and registered in the
+Go home folders, the Fridge app catalog, and the Go changelog.
+
 ## Architecture
 
 - **Neo4j 5 Community is the ONLY persistent transit data store.** No SQLite, Postgres, PostGIS or MongoDB in the transit subproject.
@@ -35,7 +43,7 @@ docker compose -f compose.yml up --build
 3. **Realtime ingestion**: centrally poll the MBTA GTFS-RT enhanced JSON trip updates, vehicle positions and alerts with ETag/timeouts/backoff, preserve source timestamps, compute deltas; monitor freshness.
 4. **Routing**: time-dependent earliest-arrival graph algorithms (service calendars, transfers, walking edges, boarding constraints, cross-midnight and DST). Never use naive unweighted shortest path as journey time.
 5. **Production UI**: use actual graph projections and live SSE, no demo labels; full schematic/line/station drilldown, ETA-at-pointer and touch equivalent, accessible 5-foot mode.
-6. **Fridge integration**: Caddy routing and login as a separate reviewed change. Do not alter existing prod routes by default.
+6. **Fridge integration**: Caddy routing and login are supplied by the Fridge deployment; production data ingestion remains a separate milestone.
 
 ## Source links
 
@@ -47,4 +55,6 @@ docker compose -f compose.yml up --build
 
 MassDOT/MBTA data attribution and developer-license compliance are required for any published product.
 
-**No deployment or production Caddy change is made by this scaffold.**
+The production deployment is deliberately read-only/demo-first: the API health
+endpoint verifies Neo4j connectivity, while the browser labels its sample
+network as demo data until GTFS ingestion and routing are shipped.
