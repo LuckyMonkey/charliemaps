@@ -48,7 +48,7 @@ export default function App() {
   }, [search]);
 
   useEffect(() => {
-    fetch('/api/health', { signal: AbortSignal.timeout(6000) })
+    fetch(`${import.meta.env.BASE_URL}api/health`, { signal: AbortSignal.timeout(6000) })
       .then(r => setStatus(r.ok ? 'ready' : 'offline'))
       .catch(() => setStatus('offline'));
   }, []);
