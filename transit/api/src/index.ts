@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { driver, graphReady, getNetworkProjection } from './graph.js';
+import { realtimeState, startRealtimeCollector, stopRealtimeCollector } from './realtime.js';
+import { readScheduleSnapshot } from './schedule.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -11,22 +13,22 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   const ready = await graphReady();
   res.status(ready ? 200 : 503).json({
     service: 'charlie-maps', status: ready ? 'ready' : 'graph_unavailable',
-    graph: 'neo4j', mode: 'scaffold', now: new Date().toISOString(),
+    graph: 'neo4j', mode: 'schedule-first', realtime: realtimeState(), now: new Date().toISOString(),
   });
 });
 
 app.get('/api/network', async (_req: Request, res: Response) => {
-  if (!(await graphReady())) {
-    res.status(503).json({ mode: 'unavailable', lines: [], updatedAt: null });
-    return;
-  }
   try {
-    const lines = await getNetworkProjection();
-    // If not imported, this should stay empty. UI owns the explicitly labeled demo.
-    res.json({ mode: lines.length ? 'graph' : 'uninitialized', lines, updatedAt: new Date().toISOString() });
+    const schedule = await readScheduleSnapshot();
+    const graph = await graphReady();
+    res.json({
+      mode: 'schedule', source: schedule.source, generatedAt: schedule.generatedAt,
+      routes: schedule.routes, stations: schedule.stations,
+      graph: graph ? 'available' : 'unavailable', updatedAt: new Date().toISOString(),
+    });
   } catch (err) {
-    console.error('network projection failed', err);
-    res.status(500).json({ mode: 'error', lines: [], updatedAt: null });
+    console.error('schedule projection failed', err);
+    res.status(500).json({ mode: 'error', routes: [], stations: [], updatedAt: null });
   }
 });
 
@@ -35,10 +37,12 @@ app.get('/api/events', (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
-  res.write('event: status\ndata: {"mode":"scaffold","live":false}\n\n');
+  res.write(`event: status\ndata: ${JSON.stringify({ mode: 'deltas-only', live: false, realtime: realtimeState() })}\n\n`);
   const timer = setInterval(() => res.write(': heartbeat\n\n'), 25000);
   req.on('close', () => clearInterval(timer));
 });
+
+app.get('/api/realtime', (_req: Request, res: Response) => res.json(realtimeState()));
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web/dist');
@@ -51,3 +55,6 @@ async function close() {
 }
 process.once('SIGTERM', () => { void close(); });
 process.once('SIGINT', () => { void close(); });
+startRealtimeCollector();
+process.once('SIGTERM', stopRealtimeCollector);
+process.once('SIGINT', stopRealtimeCollector);
