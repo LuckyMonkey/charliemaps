@@ -9,7 +9,7 @@ FROM node:22-alpine AS app
 WORKDIR /app
 ENV NODE_ENV=production
 COPY api/package.json ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --ignore-scripts
 COPY api/ ./
 COPY --from=web-build /build/web/dist ./web/dist
 USER node
