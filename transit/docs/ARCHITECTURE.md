@@ -18,19 +18,19 @@
 - `GET /api/health`: API + graph connectivity status; 503 if Neo4j is unavailable.
 - `GET /api/network`: UI-friendly graph projection. Before import, returns `{mode:"uninitialized", lines:[], nodes:[]}`, never fabricated live data.
 - `GET /api/events`: SSE endpoint; keepalive/protocol scaffold. Later emits graph-verified `vehicle`, `prediction`, `alert`, `snapshot` deltas.
-- `GET /api/lines/:id` and `/api/stations/:id`: later, validated route-focused projections.
+- `GET /api/lines`, `/api/lines/:id`, `/api/stations/:id`, `/api/vehicles`, `/api/arrivals`, `/api/alerts`: live since 0.2.0 (see README); served from the GTFS projection + the realtime collector until the graph import lands.
 - `GET /api/eta?from=...&to=...&departAt=...`: later, time-aware itinerary with uncertainty.
 - Browser uses a **local deterministic design dataset** only until imported graph exists, with a conspicuous DEMO indicator.
 
 ## Layout
 
-- Whole-network SVG = schematic metro corridors + Commuter Rail in purple + bus ribbons. Complexity reduction must be level-of-detail, not deleting routes from underlying data.
+- Whole-network map = real GTFS geometry on canvas (0.2.0; SVG could not pan at 30 fps on Fridge's 2012 laptops), official route colours, Commuter Rail purple, buses yellow, ferries dashed teal. Complexity reduction is level-of-detail (simplification levels, culling, label collision), never deleting routes.
 - Select line -> SVG morphs or transitions into vertical linear stop timeline. Selected vehicles move with route shape/position mapping.
 - Select stop -> progressive fractal/branch panel displays intersecting routes and bus connections, transit pathways, transfers.
 - Hover a destination -> pointer-anchored route ETA tooltip; touch -> tap-based equivalent. If no planner, show `Demo ETA` clearly rather than promise a real ETA.
 - Back/Escape/overview button return to previous focus; never hijack scroll in a way that traps long station lists.
 - High contrast, white background, 5-foot accessible view, reduced motion, keyboard and screen-reader labeling.
-- A future `renderMode: geographic | schematic` uses real GTFS shapes and geographic coordinates; do not invent precise train GPS positions.
+- `geographic` is the render mode now (GTFS shapes). A `schematic` mode can come later. Vehicles are drawn only at their reported GPS position, faded when the feed is stale; never interpolated.
 
 ## Performance and operational guardrails
 

@@ -9,3 +9,4 @@ coverage/
 .gtfs-cache/
 *.zip
 *.pb
+web/public/data/

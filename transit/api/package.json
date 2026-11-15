@@ -1,7 +1,7 @@
 {
   "name": "charlie-maps-api",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -10,12 +10,14 @@
   },
   "dependencies": {
     "express": "^4.21.2",
-    "neo4j-driver": "^5.28.1"
+    "neo4j-driver": "^5.28.1",
+    "compression": "^1.7.5"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/compression": "^1.7.5"
   }
 }

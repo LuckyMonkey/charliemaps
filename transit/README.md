@@ -2,7 +2,12 @@
 
 **Boston is Charlie canon.** A schedule-first, graph-native MBTA explorer on Fridge.
 
-> Status: schedule-first transit app on `main`. The existing CharlieMaps PostGIS/photo project in the repository root is preserved unchanged. The map projection is generated from the official MBTA GTFS archive; realtime is server-side deltas only.
+> Status (0.2.0, 2026-11-15): the map draws **every** MBTA route on its real track geometry (GTFS
+> `shapes.txt`): subway, light rail, Mattapan, Silver Line, all Commuter Rail branches (and the
+> CapeFLYER), 146 bus routes, ferries, and all ~6,900 stations and stops, over an OpenStreetMap
+> land/water backdrop. Live vehicles, departures and alerts come from the server's one MBTA collector
+> (SSE to the browser). Neo4j graph import is still the next milestone; the API serves the GTFS
+> projection until then.
 
 ## Fridge integration
 
@@ -21,7 +26,14 @@ Go home folders, the Fridge app catalog, and the Go changelog.
 - GTFS static becomes graph objects: Line, Route, Stop, Station, RoutePattern, ServiceCalendar, Trip, StopTime, Shape, Pathway, Transfer, FeedBatch.
 - Runtime objects: ServiceRun, Vehicle, Prediction, VehicleObservation, Alert; relations preserve provenance and times.
 - API: Node.js 22 + Express + TypeScript + official Neo4j driver.
-- UI: React + TypeScript + SVG; a minimal white schematic with official GTFS route colours, every imported rapid-transit station, transfer overlaps, and a vertical line/station drilldown.
+- UI: React + TypeScript panels over one `<canvas>` map (`web/src/MapView.ts`). The canvas replaced the SVG
+  map in 0.2.0: thousands of SVG nodes could not pan at 30 fps on the 2012 laptops. Geometry is the real
+  GTFS track, styled like the official MBTA map (route colours, white stations with black rings,
+  bigger rings at transfers, CR purple, buses yellow). Pan = drag / arrows; zoom = wheel, pinch, +/-,
+  double-click. A raster cache makes a drag one `drawImage`; a sharp redraw follows when the map rests.
+  Level of detail: 3 simplification levels, chunked culling, labels placed without overlap.
+- Fridge frame: the server renders the house app bar (`Charlie Maps · fridge.run`, user chip, Sign out)
+  from Caddy's `X-Fridge-*` headers into `web/index.html` at `<!--fridge-bar-->` (HIG Canvas layout).
 - Schedule is authoritative for planned movements; realtime creates timestamped revisions/deltas, never silently overwrites timetable facts.
 - Browser sees graph **projections**, not Neo4j credentials. The server polls MBTA realtime feeds once per minute with ETags; browsers never poll MBTA individually.
 
@@ -47,6 +59,38 @@ docker compose -f compose.yml up --build
 4. **Routing**: time-dependent earliest-arrival graph algorithms (service calendars, transfers, walking edges, boarding constraints, cross-midnight and DST). Never use naive unweighted shortest path as journey time.
 5. **Production UI**: use actual graph projections and live SSE, no demo labels; full schematic/line/station drilldown, ETA-at-pointer and touch equivalent, accessible 5-foot mode.
 6. **Fridge integration**: Caddy routing and login are supplied by the Fridge deployment; production data ingestion remains a separate milestone.
+
+## Map data (rebuild when the feed changes)
+
+```bash
+# 1. the schedule projection: network.json (browser) + server.json (API lookup index)
+python3 -I tools/build-network-data.py /path/to/MBTA_GTFS.zip
+# 2. the land/water backdrop (rarely): Overpass queries are in the script's docstring
+python3 -I tools/build-basemap.py coast.json water.json
+```
+
+Both write to `web/public/data/` and ship in the image. Rail-replacement shuttles are left out
+(service alerts announce them).
+
+## API
+
+All JSON, `Cache-Control: no-store`, every realtime answer carries `asOf` (feed timestamp) and `live`
+(false when the feed is older than 3 minutes; then no times are shown).
+
+| Route | What |
+|---|---|
+| `GET /api/health` | API + Neo4j connectivity, schedule feed version, realtime feed states (503 if the graph is down) |
+| `GET /api/network` | the full schedule projection (same as `data/network.json`) |
+| `GET /api/lines` | every route: id, name, mode, colour, `alert` (highest active severity) |
+| `GET /api/lines/:id` | one route: branches with stops in order, active alerts, live vehicles |
+| `GET /api/stations/:id` | a station or stop: lines, next departures (MBTA predictions), alerts |
+| `GET /api/vehicles[?route=]` | live vehicle positions (revenue service only) |
+| `GET /api/arrivals?station=` | next departures at a station |
+| `GET /api/alerts[?route=&station=]` | active alerts |
+| `GET /api/events` | SSE: `vehicles` (every fresh snapshot, ~15 s), `alerts`, `predictions` pings |
+
+The collector polls `VehiclePositions` every 15 s, `TripUpdates` every 30 s and `Alerts` every 60 s,
+with ETags and exponential backoff; browsers never call MBTA.
 
 ## Source links
 
