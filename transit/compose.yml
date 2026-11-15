@@ -1,0 +1,30 @@
+# One dedicated app container on Fridge's shared web/graph runtimes.
+name: charlie-maps-transit
+services:
+  transit:
+    build: .
+    image: fridge-charliemaps-transit:0.1.0
+    container_name: charliemaps-transit
+    command: ["npm", "start"]
+    env_file: .env
+    environment:
+      PORT: "4100"
+      NEO4J_URI: bolt://gis-graph:7687
+    read_only: true
+    tmpfs: [/tmp]
+    init: true
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks: [web, graph]
+networks:
+  web:
+    name: fridge-homepage_default
+    external: true
+  graph:
+    name: gis-graph
+    external: true
